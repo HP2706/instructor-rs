@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use validator::{Validate, ValidationError, ValidateArgs};// Import serde_json Error
+use validator::{Validate, ValidationError, ValidateArgs, ValidationErrors};// Import serde_json Error
 use std::result::Result::Err; // Import std Result
 use schemars::JsonSchema;
 use crate::types::JsonError;
@@ -7,43 +7,50 @@ use crate::types::JsonError;
 pub trait JsonLoad {
     fn load_from_json(json: &str) -> Result<Self, JsonError>
     where
-        Self: Sized + Validate;
+        Self: Sized,
+        for<'a> &'a Self: Validate;
 }
 
 #[derive(Debug, Validate, Deserialize, Serialize, JsonSchema)]
-pub struct SignupData {
-    #[validate
-        (custom(function = "validate_value", arg = "&'v_a str", message = "Value is not contained within arg"))
-    ]
-    pub value: String,
+pub struct TestStruct {
+    #[validate(custom(function = "validate_value", arg = "(i64, i64)"))]
+    pub value: i64,
 }
 
-fn validate_value(sentence: &str, arg : &str) -> Result<(), ValidationError> {
-    if !(arg.contains(sentence)) {
-        let err_message = format!("Value {} is not contained within arg: {}\n", sentence, arg);
-        let leaked_message = Box::leak(err_message.into_boxed_str());
-        return Err(ValidationError::new(leaked_message));
-    }
-
+fn validate_value(v: i64, arg : (i64, i64)) -> Result<(), ValidationError> {
+    if v != arg.0*arg.1 {
+        return Err(ValidationError::new("value must be equal to the product of the two arguments"));
+    } 
     Ok(())
 }
 
-impl JsonLoad for SignupData {
+impl JsonLoad for TestStruct {
     fn load_from_json(json: &str) -> Result<Self, JsonError> {
-        let data = serde_json::from_str::<SignupData>(json).
+        let data = serde_json::from_str::<TestStruct>(json).
             map_err(JsonError::SerdeJson)?;
         let mut text = "hello from the other side";
-        match data.validate_args(&text) {
+
+        match data.validate_args((7, 10)) {
             Ok(_) => Ok(data),
             Err(e) => Err(JsonError::Validation(e)),
         }
     }
 }
 
-impl Default for SignupData {
+impl Validate for TestStruct {
+    fn validate(&self) -> Result<(), ValidationErrors> {
+        // Implement validation logic here.
+        // For simplicity, we're directly calling validate on the instance,
+        // which is possible because TestStruct itself derives Validate.
+        self.validate()
+    }
+}
+
+
+impl Default for TestStruct {
     fn default() -> Self {
-        SignupData {
-            value: "".to_string(),
+        TestStruct {
+            value: 70,
         }
     }
 }
