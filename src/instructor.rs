@@ -4,13 +4,14 @@ use openai_api_rust::*;
 use openai_api_rust::chat::*;
 use openai_api_rust::completions::*;
 use schemars::{JsonSchema, schema_for};
-use crate::object::JsonLoad;
-use validator::Validate;
+use crate::utils::validate_with_args;
+use crate::traits::LoadFromJson;
+use validator::{Validate, ValidateArgs};
 
-pub async fn chat_llm<T>(messages: &mut Vec<Message>) -> T
+pub async fn chat_llm<'v_a, T>(messages: &mut Vec<Message>, validation_args: T::Args) 
+    -> T
     where T: 
-        JsonSchema + for<'a> validator::ValidateArgs<'a> + 
-        JsonLoad + Validate + Default 
+        JsonSchema + Validate + Default + ValidateArgs<'v_a> + LoadFromJson<T> + Serialize
     {
     let auth = Auth::from_env().unwrap();
     let openai = OpenAI::new(auth, "https://api.openai.com/v1/");
@@ -26,6 +27,7 @@ pub async fn chat_llm<T>(messages: &mut Vec<Message>) -> T
     };
 
     messages.push(message);
+    println!("messages: {:?}", messages);
     
     let body = ChatBody {
         model: "gpt-3.5-turbo".to_string(),
@@ -46,6 +48,6 @@ pub async fn chat_llm<T>(messages: &mut Vec<Message>) -> T
     let message = &choice[0].message.as_ref().unwrap();
     println!("message: {:?}", message.content);
     let data = T::load_from_json(&message.content).unwrap();
-    return data
+    return validate_with_args(data, validation_args).unwrap();
 }
 
