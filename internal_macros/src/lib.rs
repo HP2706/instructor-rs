@@ -11,8 +11,8 @@ pub fn schema_to_string_derive(input: TokenStream) -> TokenStream {
 
     let name = &input.ident;
     let gen = quote! {
-        impl DumpSchema for #name {
-            fn schema_to_string(&self) -> String {
+        impl #name {
+            pub fn schema_to_string() -> String {
                 let schema = schemars::schema_for!(#name);
                 serde_json::to_string_pretty(&schema).unwrap()
             }
