@@ -9,7 +9,7 @@ use openai_api_rs::v1::chat_completion::{
 use shared::DumpSchema;
 use crate::exceptions::NotImplementedError;
 use std::collections::HashMap;
-// Assuming `retry_sync` and `handle_response_model` are implemented elsewhere
+
 fn retry_sync<F, R>(func: F, max_retries: i32) -> Result<R, OpenAIError>
 where
     F: Fn() -> Result<R, OpenAIError>,
@@ -24,29 +24,22 @@ where
     }
 }
 
-fn handle_response_model<T>
-    (response_model: Option<IterableOrSingle<T>>, mode: Mode, kwargs : &mut ChatCompletionRequest) 
-    -> Result<(), NotImplementedError> 
-    where T: DumpSchema
-    {
-    
-    match response_model  {
-        Some(model) => {
 
-            if kwargs.stream == Some(true) {
-                match model {
-                    IterableOrSingle::Iterable(model) => {
+
+pub fn handle_response_model<T: DumpSchema>
+    (response_model: Option<IterableOrSingle<T>>, mode: Mode, kwargs : &mut ChatCompletionRequest) 
+    -> Result<(), NotImplementedError> {
+    match response_model  {
+        Some(Iterable_model) => {
+            let schema =  match Iterable_model {
+                IterableOrSingle::Iterable(_) => {
+                    if kwargs.stream == Some(true) {
                         return Err(NotImplementedError{message: "Response model is required for streaming.".to_string()});
                     }
-                    _ => {
-                        //pass
-                    }
-                }
-            }
-
-            let schema =  match model {
-                IterableOrSingle::Iterable(item) => item.schema_to_string(),
-                IterableOrSingle::Single(item) => item.schema_to_string(),
+                    T::schema_to_string()
+                    
+                },
+                IterableOrSingle::Single(_) => T::schema_to_string(),
             };
 
             match mode {
