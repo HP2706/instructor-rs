@@ -1,3 +1,4 @@
+workspace = { members = ["internal_macros", "shared"] }
 [package]
 name = "instructor-rs"
 version = "0.1.0"
@@ -6,11 +7,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+shared = { path = "shared" }
+internal_macros = { path = "internal_macros" }
 dotenvy = "0.15.7"
 serde = "1.0.197"
 serde_json = "1.0.115"
+schemars = "0.8.16"
 tokio = {version = "1.36.0", features = ["full"]}
 validator = { version = "0.16", features = ["derive"] }
-openai_api_rust = "0.1.8"
-schemars = "0.8.16"
+openai-api-rs = "4.0.8"
+
+syn = {version = "2.0.55", features = ["full"]}
 
