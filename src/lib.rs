@@ -1,5 +1,10 @@
-mod instructor;
-mod types;
-mod object;
-mod traits;
-mod utils;
+pub mod types;
+pub mod object;
+pub mod traits;
+pub mod utils;
+pub mod mode;
+pub mod process_response;
+pub mod retry;
+pub mod patch;
+pub mod exceptions;
+pub mod enums;

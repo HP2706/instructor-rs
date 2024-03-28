@@ -1,5 +1,6 @@
 use validator::ValidationErrors;
 use std::fmt;
+use std::error::Error;
 
 #[derive(Debug)]
 pub enum JsonError {
@@ -20,4 +21,16 @@ impl From<ValidationErrors> for JsonError {
     fn from(err: ValidationErrors) -> JsonError {
         JsonError::Validation(err)
     }
+}
+
+
+#[derive(Debug)]
+pub struct RetryError {
+    pub last_attempt: Box<dyn Error>, // Simplified for example purposes
+}
+
+
+struct OpenAiKwargs {
+    
+
 }
