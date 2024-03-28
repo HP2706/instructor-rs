@@ -105,7 +105,8 @@ fn handle_response_model<T>
                     match kwargs.messages.get_mut(0) {
                         Some(message) if message.role == MessageRole::system => {
                             if let Content::Text(ref mut text) = message.content {
-                                *text += &format!("\n\n{:?}", &message); //watch out for bad formatting
+                                let message_content = format!("\n\n{:?}", text);
+                                *text += &message_content; //watch out for bad formatting
                             }
                         },
                         _ => {
