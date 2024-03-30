@@ -12,6 +12,7 @@ use crate::traits::OpenAISchema;
 use crate::enums::Error;
 use std::collections::HashMap;
 use crate::enums::InstructorResponse;
+use schemars::JsonSchema;
 
 
 pub fn handle_response_model<T>(
@@ -117,16 +118,17 @@ where
     }
 }
 
-pub fn process_response<T>(
+pub fn process_response<T, A>(
     response: &ChatCompletionResponse,
-    response_model : &Option<IterableOrSingle<T>>,
+    response_model : &Option<T>,
     stream: bool,
-    validation_context: &<T as OpenAISchema<T>>::Args,
+    validation_context: &A,
     mode: Mode,
-) -> Result<InstructorResponse<T>, Error>
+) -> Result<IterableOrSingle<T>, Error>
 where
-    T: ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de> + OpenAISchema<T, Args = T> ,
-{   
+    T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + JsonSchema,
+    A: 'static + Copy,
+{
 
     /* if response_model.is_none() {
         return Ok(InstructorResponse::Completion(response));

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use validator::Validate;// Import serde_json Error
+use validator::{Validate, ValidationError};// Import serde_json Error
 use schemars::JsonSchema;
 use instructor_rs::traits::OpenAISchema;
 use openai_api_rs::v1::api::Client;
@@ -17,9 +17,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
    /*  let instructor_client = Patch { client }; */
 
     #[derive(JsonSchema, serde::Serialize, Debug, Default, validator::Validate, serde::Deserialize, Clone)]
-    struct ResponseModel {
-        #[validate(length(min = 1))]
-        message: String,
+    struct TestStruct {
+        #[validate(custom(function = "validate", arg = "( i64)"))]
+        value: i64,
+    }
+
+    fn validate(value: i64, arg: i64) -> Result<(), ValidationError> {
+        if value < 0 {
+            return Err(ValidationError::new("value must be greater than 0"));
+        }
+        Ok(())
     }
 
 
@@ -33,8 +40,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     
     let result = patched_client.chat_completion(
-        Some(IterableOrSingle::Iterable(ResponseModel::default())),
-        Some(&()),
+        Some(IterableOrSingle::Iterable(TestStruct::default())),
+        Some(1),
         1,
         req
     );

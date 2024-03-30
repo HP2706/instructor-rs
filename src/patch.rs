@@ -24,25 +24,27 @@ pub struct Patch {
 }
 
 impl Patch {
-    pub fn chat_completion<T>(
-        &mut self, 
+    pub fn chat_completion<T, A>(
+        &self, 
         response_model: Option<IterableOrSingle<T>>,
-        validation_context: Option<<T as OpenAISchema<T>>::Args>,
+        validation_context: Option<A>,
         max_retries: usize,
         kwargs: ChatCompletionRequest
     ) -> Result<InstructorResponse<T>, Error>
 
-    where T: ValidateArgs<'static> + Default + Serialize + for<'de> Deserialize<'de> + OpenAISchema<T, Args = T> + schemars::JsonSchema
+    where
+        T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + JsonSchema + OpenAISchema<T>,
+        A: 'static + Copy,
     {
         // if no mode is provided, default to Mode::JSON
-        match self.mode {
-            Some(mode) => {},
-            None => self.mode = Some(Mode::JSON),
-        }
+        let mode = match self.mode {
+            Some(mode) => mode,
+            None => Mode::JSON,
+        };
 
         let (response_model, mut kwargs) = handle_response_model(
             Some(response_model.unwrap()), 
-            self.mode.unwrap(), 
+            mode, 
             kwargs
         ).map_err(|e| e)?;
 

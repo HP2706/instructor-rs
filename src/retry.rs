@@ -3,7 +3,7 @@ use crate::mode::Mode;
 use crate::traits::OpenAISchema;
 use crate::enums::Error;
 use crate::process_response::process_response;
-
+use schemars::JsonSchema;
 use validator::ValidateArgs;
 use openai_api_rs::v1::chat_completion::{
     ChatCompletionRequest, ChatCompletionResponse, ChatCompletionMessage, MessageRole, Content
@@ -56,16 +56,17 @@ pub fn reask_messages(
 }
 
 
-pub fn retry_sync<'v_a, 'f, T>(
+pub fn retry_sync<'v_a, 'f, T, A>(
     func: Box<dyn Fn(ChatCompletionRequest) -> Result<ChatCompletionResponse, APIError> + 'f>,
     response_model: Option<IterableOrSingle<T>>,
-    validation_context: Option<<T as OpenAISchema<T>>::Args>,
+    validation_context: Option<A>,
     kwargs : &mut ChatCompletionRequest, 
     max_retries: usize,
     mode: Mode,
 ) -> Result<InstructorResponse<T>, Error>
 where
-    T: ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de> + OpenAISchema<T, Args = T>,
+    T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + JsonSchema + OpenAISchema<T>,
+    A: 'static + Copy,
 {
     let mut attempt = 0;
 
@@ -79,7 +80,11 @@ where
 
                 match result {
                     Ok(result) => {
-                        return Ok(result);
+                        match result {
+                            IterableOrSingle::Single(item) => return Ok(InstructorResponse::Model(item)),
+                            IterableOrSingle::Iterable(items) => {
+                            },
+                        }
                     }
                     Err(e) => {
                         let messages = reask_messages(&response, mode, e);

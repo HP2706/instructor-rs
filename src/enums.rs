@@ -2,8 +2,8 @@
 use serde::{Deserialize, Serialize};
 use openai_api_rs::v1::chat_completion::ChatCompletionResponse;
 use crate::traits::OpenAISchema;
-use validator::ValidateArgs;
-
+use validator::{ValidateArgs, ValidationErrors};
+use schemars::JsonSchema;
 use std::fmt;
 use serde_json::Error as SerdeError;
 
@@ -41,10 +41,27 @@ where T: ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de> + OpenAIS
 }
 
 
-#[derive(Debug, Deserialize, Serialize, Copy, Clone)]
-pub enum IterableOrSingle<T> {
+#[derive(Debug, Deserialize, Serialize, Copy, Clone, JsonSchema)]
+pub enum IterableOrSingle<T>
+where T: ValidateArgs<'static> 
+{
     Iterable(T), 
     Single(T),
+}
+
+impl<'v_a, T> ValidateArgs<'static> for IterableOrSingle<T>
+where
+    T: ValidateArgs<'static>,
+{
+    type Args = T::Args;
+
+    fn validate_args(&self, args: Self::Args) -> Result<(), ValidationErrors> {
+        match self {
+            IterableOrSingle::Iterable(item) | IterableOrSingle::Single(item) => {
+                item.validate_args(args)
+            },
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
