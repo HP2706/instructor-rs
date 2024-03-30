@@ -15,13 +15,14 @@ use crate::enums::InstructorResponse;
 use schemars::JsonSchema;
 
 
-pub fn handle_response_model<T>(
+pub fn handle_response_model<A, T>(
     response_model: Option<IterableOrSingle<T>>, 
     mode: Mode, 
     kwargs : ChatCompletionRequest
 ) -> Result<(Option<IterableOrSingle<T>>, ChatCompletionRequest), Error> 
 where
-    T: ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de> + OpenAISchema<T> + schemars::JsonSchema
+    T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + JsonSchema + OpenAISchema<A,T>,
+    A: 'static + Copy,
 {
     let mut new_kwargs = kwargs.clone();
     match response_model.as_ref()  {

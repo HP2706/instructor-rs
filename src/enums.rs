@@ -33,8 +33,9 @@ impl fmt::Display for Error {
 
 
 
-pub enum InstructorResponse<T>
-where T: ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de> + OpenAISchema<T>
+pub enum InstructorResponse<A, T>
+    where T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + OpenAISchema<A, T>,
+    A: 'static + Copy,
 {
     Completion(ChatCompletionResponse),
     Model(IterableOrSingle<T>),

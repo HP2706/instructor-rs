@@ -5,7 +5,7 @@ use openai_api_rs::v1::chat_completion::ChatCompletionResponse;
 use crate::enums::Error;
 use crate::mode::Mode;
 use crate::utils::extract_json_from_codeblock;
-pub trait OpenAISchema<Args> {
+pub trait OpenAISchema<Args, T> {
     type Args;
     fn openai_schema() -> String;
 
@@ -29,7 +29,7 @@ pub trait OpenAISchema<Args> {
         Self: Sized + ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de>;
 }
 
-impl<T, A> OpenAISchema<A> for T
+impl<A, T> OpenAISchema<A, T> for T
 where
     T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + JsonSchema,
     A: 'static + Copy,

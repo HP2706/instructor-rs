@@ -30,10 +30,10 @@ impl Patch {
         validation_context: Option<A>,
         max_retries: usize,
         kwargs: ChatCompletionRequest
-    ) -> Result<InstructorResponse<T>, Error>
+    ) -> Result<InstructorResponse<A, T>, Error>
 
     where
-        T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + JsonSchema + OpenAISchema<T>,
+        T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + JsonSchema + OpenAISchema<A,T>,
         A: 'static + Copy,
     {
         // if no mode is provided, default to Mode::JSON

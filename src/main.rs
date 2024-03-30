@@ -16,11 +16,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let patched_client = Patch { client, mode: Some(Mode::JSON) };
    /*  let instructor_client = Patch { client }; */
 
-    #[derive(JsonSchema, serde::Serialize, Debug, Default, validator::Validate, serde::Deserialize, Clone)]
+    #[derive(
+        JsonSchema, serde::Serialize, Debug, Default, 
+        validator::Validate, serde::Deserialize, Clone,
+        Copy
+    )]
     struct TestStruct {
         #[validate(custom(function = "validate", arg = "( i64)"))]
         value: i64,
-    }
+    }        
+    
 
     fn validate(value: i64, arg: i64) -> Result<(), ValidationError> {
         if value < 0 {

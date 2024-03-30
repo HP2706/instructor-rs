@@ -63,9 +63,9 @@ pub fn retry_sync<'v_a, 'f, T, A>(
     kwargs : &mut ChatCompletionRequest, 
     max_retries: usize,
     mode: Mode,
-) -> Result<InstructorResponse<T>, Error>
+) -> Result<InstructorResponse<A, T>, Error>
 where
-    T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + JsonSchema + OpenAISchema<T>,
+    T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + JsonSchema + OpenAISchema<A, T>,
     A: 'static + Copy,
 {
     let mut attempt = 0;
