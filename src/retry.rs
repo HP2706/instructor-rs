@@ -59,13 +59,13 @@ pub fn reask_messages(
 pub fn retry_sync<'v_a, 'f, T>(
     func: Box<dyn Fn(ChatCompletionRequest) -> Result<ChatCompletionResponse, APIError> + 'f>,
     response_model: Option<IterableOrSingle<T>>,
-    validation_context: Option<T::Args>,
+    validation_context: Option<<T as OpenAISchema<T>>::Args>,
     kwargs : &mut ChatCompletionRequest, 
     max_retries: usize,
     mode: Mode,
 ) -> Result<InstructorResponse<T>, Error>
 where
-    T: ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de> + OpenAISchema<T>,
+    T: ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de> + OpenAISchema<T, Args = T>,
 {
     let mut attempt = 0;
 

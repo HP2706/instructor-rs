@@ -1,27 +1,27 @@
-/* use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use validator::Validate;// Import serde_json Error
 use schemars::JsonSchema;
-
+use instructor_rs::traits::OpenAISchema;
 use openai_api_rs::v1::api::Client;
 use openai_api_rs::v1::chat_completion::{self, ChatCompletionRequest};
 use openai_api_rs::v1::common::GPT4_TURBO_PREVIEW; 
 use std::{env, vec};
-
-use internal_macros::*;
-
-use instructor_rs::patch::{Patch, InstructorChatCompletionCreate};
+use instructor_rs::mode::Mode;  
+use instructor_rs::patch::Patch;
+use instructor_rs::enums::IterableOrSingle;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new(env::var("OPENAI_API_KEY").unwrap().to_string());
 
+    let patched_client = Patch { client, mode: Some(Mode::JSON) };
    /*  let instructor_client = Patch { client }; */
 
-    #[derive(Debug, Deserialize, Serialize, JsonSchema, Validate, OpenAISchema)]
+    #[derive(JsonSchema, serde::Serialize, Debug, Default, validator::Validate, serde::Deserialize, Clone)]
     struct ResponseModel {
+        #[validate(length(min = 1))]
         message: String,
     }
 
-    ResponseModel::from_response(&response, ResponseModel::Args, Mode::JSON);
 
     let req = ChatCompletionRequest::new(
         GPT4_TURBO_PREVIEW.to_string(),
@@ -31,43 +31,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             name: None,
         }],
     );
-    let result = client.chat_completion(req)?;
-    println!("{:?}", result.choices[0].message.content);
+    
+    let result = patched_client.chat_completion(
+        Some(IterableOrSingle::Iterable(ResponseModel::default())),
+        Some(&()),
+        1,
+        req
+    );
+    
 
 
     Ok(())
-}
-*/
-
-pub mod test;
-pub mod utils;
-use crate::test::{Mode, Error, extract_json_from_codeblock};
-
-fn main() {
-    #[derive(JsonSchema, serde::Serialize, Debug, Default, validator::Validate, serde::Deserialize)]
-    struct Test {
-        #[validate(custom(function = "validate", arg = "(i64)"))]
-        value: i64,
-    }
-
-    use validator::ValidationError;
-
-    fn validate(value: i64, arg: i64) -> Result<(), ValidationError> {
-        if value > arg {
-            return Err(ValidationError::new("Value is greater than arg"));
-        }
-        Ok(())
-    }
-  
-    
-    
-    let data = "{
-        \"value\": 6
-    }";
-    match Test::model_validate_json(data, (5)) {
-        Ok(a) => println!("{:?}", a),
-        Err(e) => println!("{:?}", e),
-    }
 }
 
 

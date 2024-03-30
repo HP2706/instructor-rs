@@ -16,31 +16,23 @@ use crate::mode::Mode;
 use crate::enums::Error;
 use crate::enums::InstructorResponse;
 
-#[derive(Debug)]
-pub struct InstructorChatCompletionCreate<T>
-where
-    T: ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de> + OpenAISchema<T> + schemars::JsonSchema,
-{
-    pub kwargs: ChatCompletionRequest,
-    pub response_model: Option<IterableOrSingle<T>>,
-    pub validation_context: Option<T::Args>,
-    pub max_retries: usize,
-    pub mode: Mode,
-}
 
 // Define a wrapper type for the Client.
 pub struct Patch {
-    client: Client,
-    mode: Option<Mode>,
+    pub client: Client,
+    pub mode: Option<Mode>,
 }
 
 impl Patch {
     pub fn chat_completion<T>(
         &mut self, 
-        mut create: InstructorChatCompletionCreate<T>
+        response_model: Option<IterableOrSingle<T>>,
+        validation_context: Option<<T as OpenAISchema<T>>::Args>,
+        max_retries: usize,
+        kwargs: ChatCompletionRequest
     ) -> Result<InstructorResponse<T>, Error>
 
-    where T: ValidateArgs<'static> + Default + Serialize + for<'de> Deserialize<'de> + OpenAISchema<T> + schemars::JsonSchema
+    where T: ValidateArgs<'static> + Default + Serialize + for<'de> Deserialize<'de> + OpenAISchema<T, Args = T> + schemars::JsonSchema
     {
         // if no mode is provided, default to Mode::JSON
         match self.mode {
@@ -49,11 +41,10 @@ impl Patch {
         }
 
         let (response_model, mut kwargs) = handle_response_model(
-            Some(create.response_model.unwrap()), 
+            Some(response_model.unwrap()), 
             self.mode.unwrap(), 
-            create.kwargs
+            kwargs
         ).map_err(|e| e)?;
-
 
         let func = Box::new(|kwargs| {
             self.client.chat_completion(kwargs)
@@ -62,10 +53,10 @@ impl Patch {
         return retry_sync(
             func,
             response_model,
-            create.validation_context,
+            validation_context,
             &mut kwargs,
-            create.max_retries,
-            create.mode
+            max_retries,
+            self.mode.unwrap(),
         );
     }
 }

@@ -20,7 +20,7 @@ pub fn handle_response_model<T>(
     kwargs : ChatCompletionRequest
 ) -> Result<(Option<IterableOrSingle<T>>, ChatCompletionRequest), Error> 
 where
-    T: ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de> + OpenAISchema + schemars::JsonSchema
+    T: ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de> + OpenAISchema<T> + schemars::JsonSchema
 {
     let mut new_kwargs = kwargs.clone();
     match response_model.as_ref()  {
@@ -121,11 +121,11 @@ pub fn process_response<T>(
     response: &ChatCompletionResponse,
     response_model : &Option<IterableOrSingle<T>>,
     stream: bool,
-    validation_context: &T::Args,
+    validation_context: &<T as OpenAISchema<T>>::Args,
     mode: Mode,
 ) -> Result<InstructorResponse<T>, Error>
 where
-    T: ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de> + OpenAISchema<T>,
+    T: ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de> + OpenAISchema<T, Args = T> ,
 {   
 
     /* if response_model.is_none() {

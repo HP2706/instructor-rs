@@ -9,21 +9,21 @@ pub trait OpenAISchema<Args> {
     type Args;
     fn openai_schema() -> String;
 
-    fn model_validate_json(data: &str, validation_context: Args) -> Result<Self, Error>
+    fn model_validate_json(data: &str, validation_context: &Args) -> Result<Self, Error>
     where
         Self: Sized + ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de>;
     
     fn from_response(
-        response: ChatCompletionResponse,
-        validation_context: Args,
+        response: &ChatCompletionResponse,
+        validation_context: &Args,
         mode: Mode,
     ) -> Result<Self, Error>
     where
         Self: Sized + ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de>;
     
     fn parse_json(
-        completion: ChatCompletionResponse,
-        validation_context: Args,
+        completion: &ChatCompletionResponse,
+        validation_context: &Args,
     ) -> Result<Self, Error>
     where
         Self: Sized + ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de>;
@@ -32,7 +32,7 @@ pub trait OpenAISchema<Args> {
 impl<T, A> OpenAISchema<A> for T
 where
     T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + JsonSchema,
-    A: 'static,
+    A: 'static + Copy,
 {
     type Args = A;
 
@@ -43,12 +43,12 @@ where
         serde_json::to_string_pretty(&schema).unwrap()
     }
 
-    fn model_validate_json(data: &str, validation_context: Self::Args) -> Result<Self, Error>
+    fn model_validate_json(data: &str, validation_context: &Self::Args) -> Result<Self, Error>
     where
         Self: Sized + ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de>,
     {
         match serde_json::from_str::<T>(data) {
-            Ok(data) => match data.validate_args(validation_context) {
+            Ok(data) => match data.validate_args(*validation_context) {
                 Ok(_) => Ok(data),
                 Err(e) => Err(Error::ValidationErrors(e)),
             },
@@ -57,8 +57,8 @@ where
     }
 
     fn from_response(
-        response: ChatCompletionResponse,
-        validation_context: Self::Args,
+        response: &ChatCompletionResponse,
+        validation_context: &Self::Args,
         mode: Mode,
     ) -> Result<Self, Error>
     where
@@ -75,8 +75,8 @@ where
     }
 
     fn parse_json(
-        completion: ChatCompletionResponse,
-        validation_context: Self::Args,
+        completion: &ChatCompletionResponse,
+        validation_context: &Self::Args,
     ) -> Result<Self, Error>
     where
         Self: Sized + ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de>,
@@ -86,3 +86,4 @@ where
         Self::model_validate_json(&json_extract, validation_context)
     }
 }
+
