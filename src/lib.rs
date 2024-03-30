@@ -1,7 +1,10 @@
 pub mod types;
-pub mod utils;
 pub mod process_response;
 pub mod retry;
 pub mod patch;
 pub mod exceptions;
+pub mod utils;
+pub mod test;
+pub mod traits;
 pub mod enums;
+pub mod mode;

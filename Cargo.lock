@@ -152,24 +152,13 @@ name = "instructor-rs"
 version = "0.1.0"
 dependencies = [
  "dotenvy",
- "internal_macros",
  "openai-api-rs",
  "schemars",
  "serde",
  "serde_json",
- "shared",
  "syn 2.0.55",
  "tokio",
  "validator",
-]
-
-[[package]]
-name = "internal_macros"
-version = "0.1.0"
-dependencies = [
- "quote",
- "shared",
- "syn 2.0.55",
 ]
 
 [[package]]
@@ -528,17 +517,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "shared"
-version = "0.1.0"
-dependencies = [
- "openai-api-rs",
- "schemars",
- "serde",
- "serde_json",
- "validator",
 ]
 
 [[package]]

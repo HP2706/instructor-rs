@@ -8,28 +8,34 @@ use openai_api_rs::v1::chat_completion::{
     ChatCompletionRequest, ChatCompletionMessage, 
     MessageRole, Content
 };
-use crate::traits::OpenAiSchema;
-use crate::exceptions::NotImplementedError;
+use crate::traits::OpenAISchema;
+use crate::enums::Error;
 use std::collections::HashMap;
+use crate::enums::InstructorResponse;
 
-pub fn handle_response_model<T: OpenAiSchema>(
+
+pub fn handle_response_model<T>(
     response_model: Option<IterableOrSingle<T>>, 
     mode: Mode, 
-    kwargs : &mut ChatCompletionRequest
-) -> Result<(), NotImplementedError> {
-    match response_model  {
+    kwargs : ChatCompletionRequest
+) -> Result<(Option<IterableOrSingle<T>>, ChatCompletionRequest), Error> 
+where
+    T: ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de> + OpenAISchema + schemars::JsonSchema
+{
+    let mut new_kwargs = kwargs.clone();
+    match response_model.as_ref()  {
         Some(Iterable_model) => {
             let schema =  match Iterable_model {
                 IterableOrSingle::Iterable(_) => {
                     if kwargs.stream == Some(true) {
                         return Err(
-                            NotImplementedError{message: "Response model is required for streaming.".to_string()}
+                            Error::NotImplementedError("Response model is required for streaming.".to_string())
                         );
                     }
-                    T::schema_to_string()
+                    T::openai_schema()
                     
                 },
-                IterableOrSingle::Single(_) => T::schema_to_string(),
+                IterableOrSingle::Single(_) => T::openai_schema(),
             };
 
             match mode {
@@ -54,15 +60,14 @@ pub fn handle_response_model<T: OpenAiSchema>(
                     );
                     match mode {
                         Mode::JSON => {
-                            let dict = HashMap::from([("type".to_string(), "json_object".to_string())]);
-                            kwargs.response_format = Some(
+                            new_kwargs.response_format = Some(
                                 serde_json::to_value(
                                     HashMap::from([("type".to_string(), "json_object".to_string())])
                                 ).unwrap()
                             );
                         },
                         Mode::JSON_SCHEMA => {
-                            kwargs.response_format = Some(
+                            new_kwargs.response_format = Some(
                                 serde_json::to_value(
                                     HashMap::from(
                                         [
@@ -74,7 +79,7 @@ pub fn handle_response_model<T: OpenAiSchema>(
                             );
                         },
                         Mode::MD_JSON => {
-                            kwargs.messages.push(ChatCompletionMessage {
+                            new_kwargs.messages.push(ChatCompletionMessage {
                                 role: MessageRole::user,
                                 content: Content::Text(
                                     "Return the correct JSON response within a ```json codeblock. not the JSON_SCHEMA".to_string()
@@ -85,7 +90,7 @@ pub fn handle_response_model<T: OpenAiSchema>(
                         _ => {}
                     }
 
-                    match kwargs.messages.get_mut(0) {
+                    match new_kwargs.messages.get_mut(0) {
                         Some(message) if message.role == MessageRole::system => {
                             if let Content::Text(ref mut text) = message.content {
                                 let message_content = format!("\n\n{:?}", text);
@@ -93,7 +98,7 @@ pub fn handle_response_model<T: OpenAiSchema>(
                             }
                         },
                         _ => {
-                            kwargs.messages.insert(0, ChatCompletionMessage {
+                            new_kwargs.messages.insert(0, ChatCompletionMessage {
                                 role: MessageRole::system,
                                 content: Content::Text(
                                     message
@@ -101,29 +106,41 @@ pub fn handle_response_model<T: OpenAiSchema>(
                                 name: None, // Assuming name is optional and not required here
                             });
                         },
-                    }
-                    
+                    } 
                 }  
             }
-            return Ok(());
+            return Ok((response_model, new_kwargs));
         },
         _ => {
-            return Ok(());
+            return Ok((response_model, kwargs));
         }
     }
 }
 
-
 pub fn process_response<T>(
     response: &ChatCompletionResponse,
-    response_model: T,
+    response_model : &Option<IterableOrSingle<T>>,
     stream: bool,
-    validation_context: T::Args,
+    validation_context: &T::Args,
     mode: Mode,
-) -> Result<T, ValidationErrors>
+) -> Result<InstructorResponse<T>, Error>
 where
-    T: ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de> + OpenAiSchema,
-{
-    let text = response.choices[0].message.content.clone().unwrap();
-    T::model_validate_json(text, validation_context)
+    T: ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de> + OpenAISchema<T>,
+{   
+
+    /* if response_model.is_none() {
+        return Ok(InstructorResponse::Completion(response));
+    }
+    */
+
+    let response_model = response_model.as_ref().unwrap();
+    let res : Result<T, Error> = T::from_response(response, validation_context, mode);
+    let model = match res {
+        Ok(model) => model,
+        Err(e) => {
+            return Err(e);
+        }
+    };
+
+    Err(Error::NotImplementedError("This feature is not yet implemented.".to_string()))
 }

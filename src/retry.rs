@@ -1,30 +1,31 @@
+use serde::{Serialize, Deserialize};
 use crate::mode::Mode;
+use crate::traits::OpenAISchema;
+use crate::enums::Error;
 use crate::process_response::process_response;
-use crate::types::{JsonError, RetryError};
+
 use validator::ValidateArgs;
-use openai_api_rs::v1::chat_completion::{ChatCompletionRequest, ChatCompletionResponse, ChatCompletionMessage, MessageRole, Content};
+use openai_api_rs::v1::chat_completion::{
+    ChatCompletionRequest, ChatCompletionResponse, ChatCompletionMessage, MessageRole, Content
+};
 use std::fmt;
-
-
+use openai_api_rs::v1::error::APIError;
+use crate::enums::InstructorResponse;
+use crate::enums::IterableOrSingle;
 
 pub fn reask_messages(
-    response: &ChatCompletionResponse, mode: Mode, exception: &impl fmt::Display
+    response: &ChatCompletionResponse, mode: Mode, exception: impl fmt::Display
 ) -> impl Iterator<Item = ChatCompletionMessage> {
-    let mut messages: Vec<ChatCompletionMessage> = Vec::new();
 
+    let first_message = &response.choices[0].message;
+    let message = ChatCompletionMessage {
+        role: first_message.role.clone(),
+        content: Content::Text(first_message.content.clone().unwrap()),
+        name: None,
+    };
+    let mut messages: Vec<ChatCompletionMessage> = vec![message];
+    //TODO fix this
     match mode {
-        /* Mode::ANTHROPIC_TOOLS => { //TODO when anthropic tools is implemented
-            messages.push(
-                ChatCompletionMessage {
-                    role: MessageRole::user,
-                    content: Content::Text(format!(
-                        "Validation Error found:\n{}\nRecall the function correctly, fix the errors",
-                        exception
-                    )),
-                    name: None,
-                }
-            );
-        } */
         Mode::MD_JSON => {
             messages.push(
                 ChatCompletionMessage {
@@ -55,25 +56,44 @@ pub fn reask_messages(
 }
 
 
-pub fn retry_sync<'v_a, T>(
-    func: Box<dyn Fn(ChatCompletionRequest) -> Result<T, JsonError>>,
-    response: ChatCompletionResponse,
-    response_model: T,
-    args : ChatCompletionRequest, 
-    stream: bool,
-    validation_context: T::Args,
-    strict: Option<bool>,
+pub fn retry_sync<'v_a, 'f, T>(
+    func: Box<dyn Fn(ChatCompletionRequest) -> Result<ChatCompletionResponse, APIError> + 'f>,
+    response_model: Option<IterableOrSingle<T>>,
+    validation_context: Option<T::Args>,
+    kwargs : &mut ChatCompletionRequest, 
+    max_retries: usize,
     mode: Mode,
-    max_retries: usize
-) -> T
+) -> Result<InstructorResponse<T>, Error>
 where
-    T: ValidateArgs<'v_a>,
+    T: ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de> + OpenAISchema<T>,
 {
     let mut attempt = 0;
-    let mut messages : Vec<ChatCompletionMessage> = Vec::new();
 
-    loop {
-        //TODO
-        attempt += 1;
+    while attempt < max_retries {
+        let response = &func(kwargs.clone());
+        match response {
+            Ok(response) => {
+                let result = process_response(
+                    response, &response_model, false, validation_context.as_ref().unwrap(), mode
+                );
+
+                match result {
+                    Ok(result) => {
+                        return Ok(result);
+                    }
+                    Err(e) => {
+                        let messages = reask_messages(&response, mode, e);
+                        println!("number of messages before: {}", kwargs.messages.len());
+                        kwargs.messages.extend(messages);
+                        println!("number of messages after: {}", kwargs.messages.len());
+                        attempt += 1;
+                    }
+                }
+            }
+            Err(e) => {
+                return Err(Error::Generic(format!("Error: {}", e).to_string()));
+            }
+        }
     }
+    Err(Error::Generic("Max retries exceeded".to_string()))
 }

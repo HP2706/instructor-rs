@@ -1,4 +1,3 @@
-workspace = { members = ["internal_macros", "shared"] }
 [package]
 name = "instructor-rs"
 version = "0.1.0"
@@ -7,8 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-shared = { path = "shared" }
-internal_macros = { path = "internal_macros" }
 dotenvy = "0.15.7"
 tokio = {version = "1.36.0", features = ["full"]}
 
