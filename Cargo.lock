@@ -534,9 +534,11 @@ dependencies = [
 name = "shared"
 version = "0.1.0"
 dependencies = [
+ "openai-api-rs",
  "schemars",
  "serde",
  "serde_json",
+ "validator",
 ]
 
 [[package]]

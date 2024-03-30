@@ -10,10 +10,11 @@ edition = "2021"
 shared = { path = "shared" }
 internal_macros = { path = "internal_macros" }
 dotenvy = "0.15.7"
+tokio = {version = "1.36.0", features = ["full"]}
+
 serde = "1.0.197"
 serde_json = "1.0.115"
 schemars = "0.8.16"
-tokio = {version = "1.36.0", features = ["full"]}
 validator = { version = "0.16", features = ["derive"] }
 openai-api-rs = "4.0.8"
 

@@ -29,8 +29,3 @@ pub struct RetryError {
     pub last_attempt: Box<dyn Error>, // Simplified for example purposes
 }
 
-
-struct OpenAiKwargs {
-    
-
-}
