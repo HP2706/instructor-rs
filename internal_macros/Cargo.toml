@@ -14,3 +14,8 @@ proc-macro = true
 shared = { path = "../shared" }
 syn = {version = "2.0.55", features = ["full"]}
 quote = "1.0.35"
+serde = "1.0.197"
+serde_json = "1.0.115"
+schemars = "0.8.16"
+validator = { version = "0.16", features = ["derive"] }
+openai-api-rs = "4.0.8"
