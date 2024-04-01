@@ -1,5 +1,4 @@
-use serde::{Deserialize, Serialize};
-use validator::{Validate, ValidationError};// Import serde_json Error
+use validator::ValidationError;// Import serde_json Error
 use schemars::JsonSchema;
 use instructor_rs::traits::OpenAISchema;
 use openai_api_rs::v1::api::Client;
@@ -21,7 +20,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         validator::Validate, serde::Deserialize, Clone,
         Copy
     )]
+    #[schemars(description = "TestStruct is an example struct for demonstration purposes")]
     struct TestStruct {
+        //value: description
+        #[schemars(description = "An integer value with a special purpose")]
         #[validate(custom(function = "validate", arg = "( i64)"))]
         value: i64,
     }        
@@ -34,7 +36,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 
+    let schema = TestStruct::openai_schema();
+    println!("{}", schema);
 
+    /*
     let req = ChatCompletionRequest::new(
         GPT4_TURBO_PREVIEW.to_string(),
         vec![chat_completion::ChatCompletionMessage {
@@ -49,7 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(1),
         1,
         req
-    );
+    ); */
     
 
 

@@ -5,13 +5,25 @@ use openai_api_rs::v1::chat_completion::ChatCompletionResponse;
 use crate::enums::Error;
 use crate::mode::Mode;
 use crate::utils::extract_json_from_codeblock;
-pub trait OpenAISchema<Args, T> {
-    type Args;
+
+
+
+pub trait BaseSchema<T>: 'static + Copy + Serialize + for<'de> Deserialize<'de> + ValidateArgs<'static> + JsonSchema + Sized {}
+
+impl<T> BaseSchema<T> for T
+where T: 'static + Copy + Serialize + for<'de> Deserialize<'de> + ValidateArgs<'static> + JsonSchema + Sized
+{}
+
+pub trait OpenAISchema<Args, T> where
+T: ValidateArgs<'static, Args=Args> + BaseSchema<T>,
+Args: 'static + Copy,
+{
+    type Args : 'static + Copy;
     fn openai_schema() -> String;
 
     fn model_validate_json(data: &str, validation_context: &Args) -> Result<Self, Error>
     where
-        Self: Sized + ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema<T>;
     
     fn from_response(
         response: &ChatCompletionResponse,
@@ -19,19 +31,19 @@ pub trait OpenAISchema<Args, T> {
         mode: Mode,
     ) -> Result<Self, Error>
     where
-        Self: Sized + ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema<T>;
     
     fn parse_json(
         completion: &ChatCompletionResponse,
         validation_context: &Args,
     ) -> Result<Self, Error>
     where
-        Self: Sized + ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema<T>;
 }
 
 impl<A, T> OpenAISchema<A, T> for T
 where
-    T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + JsonSchema,
+    T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
     A: 'static + Copy,
 {
     type Args = A;
@@ -45,7 +57,7 @@ where
 
     fn model_validate_json(data: &str, validation_context: &Self::Args) -> Result<Self, Error>
     where
-        Self: Sized + ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de>,
+        Self: Sized + ValidateArgs<'static> + BaseSchema<T>,
     {
         match serde_json::from_str::<T>(data) {
             Ok(data) => match data.validate_args(*validation_context) {
@@ -62,7 +74,7 @@ where
         mode: Mode,
     ) -> Result<Self, Error>
     where
-        Self: Sized + ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de>,
+        Self: Sized + ValidateArgs<'static> + BaseSchema<T>,
     {
         match mode {
             Mode::JSON | Mode::JSON_SCHEMA | Mode::MD_JSON => {
@@ -79,7 +91,7 @@ where
         validation_context: &Self::Args,
     ) -> Result<Self, Error>
     where
-        Self: Sized + ValidateArgs<'static> + Serialize + for<'de> Deserialize<'de>,
+        Self: Sized + ValidateArgs<'static> + BaseSchema<T>,
     {
         let text = completion.choices[0].message.content.clone().unwrap();
         let json_extract = extract_json_from_codeblock(&text);

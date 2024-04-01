@@ -1,18 +1,16 @@
-use validator::{ValidateArgs, ValidationErrors};
+use validator::ValidateArgs;
+
 
 use openai_api_rs::v1::chat_completion::ChatCompletionResponse;
-use serde::{Serialize, Deserialize};
 use crate::mode::Mode;
-use crate::{enums::IterableOrSingle};
+
 use openai_api_rs::v1::chat_completion::{
     ChatCompletionRequest, ChatCompletionMessage, 
     MessageRole, Content
 };
-use crate::traits::OpenAISchema;
-use crate::enums::Error;
+use crate::traits::{OpenAISchema, BaseSchema};
+use crate::enums::{Error, IterableOrSingle};
 use std::collections::HashMap;
-use crate::enums::InstructorResponse;
-use schemars::JsonSchema;
 
 
 pub fn handle_response_model<A, T>(
@@ -21,7 +19,7 @@ pub fn handle_response_model<A, T>(
     kwargs : ChatCompletionRequest
 ) -> Result<(Option<IterableOrSingle<T>>, ChatCompletionRequest), Error> 
 where
-    T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + JsonSchema + OpenAISchema<A,T>,
+    T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
     A: 'static + Copy,
 {
     let mut new_kwargs = kwargs.clone();
@@ -127,7 +125,7 @@ pub fn process_response<T, A>(
     mode: Mode,
 ) -> Result<IterableOrSingle<T>, Error>
 where
-    T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + JsonSchema,
+    T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
     A: 'static + Copy,
 {
 

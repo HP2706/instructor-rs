@@ -1,9 +1,7 @@
-use serde::{Serialize, Deserialize};
 use crate::mode::Mode;
-use crate::traits::OpenAISchema;
 use crate::enums::Error;
 use crate::process_response::process_response;
-use schemars::JsonSchema;
+use crate::traits::BaseSchema;
 use validator::ValidateArgs;
 use openai_api_rs::v1::chat_completion::{
     ChatCompletionRequest, ChatCompletionResponse, ChatCompletionMessage, MessageRole, Content
@@ -65,7 +63,7 @@ pub fn retry_sync<'v_a, 'f, T, A>(
     mode: Mode,
 ) -> Result<InstructorResponse<A, T>, Error>
 where
-    T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + JsonSchema + OpenAISchema<A, T>,
+    T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
     A: 'static + Copy,
 {
     let mut attempt = 0;

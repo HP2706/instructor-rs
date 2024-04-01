@@ -1,7 +1,7 @@
 
 use serde::{Deserialize, Serialize};
 use openai_api_rs::v1::chat_completion::ChatCompletionResponse;
-use crate::traits::OpenAISchema;
+use crate::traits::BaseSchema;
 use validator::{ValidateArgs, ValidationErrors};
 use schemars::JsonSchema;
 use std::fmt;
@@ -34,7 +34,7 @@ impl fmt::Display for Error {
 
 
 pub enum InstructorResponse<A, T>
-    where T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + OpenAISchema<A, T>,
+    where T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
     A: 'static + Copy,
 {
     Completion(ChatCompletionResponse),

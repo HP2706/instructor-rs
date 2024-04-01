@@ -1,16 +1,11 @@
 
-use openai_api_rs::v1::error::APIError;
-use crate::process_response::{process_response, handle_response_model};
-use crate::enums::{Iterable, IterableOrSingle};
+use crate::process_response::handle_response_model;
+use crate::enums::IterableOrSingle;
 use crate::retry::retry_sync;
 use openai_api_rs::v1::api::Client;
-use openai_api_rs::v1::chat_completion::{ChatCompletionRequest, ChatCompletionResponse};
+use openai_api_rs::v1::chat_completion::ChatCompletionRequest;
 
-
-use serde::{Deserialize, Serialize};
-use validator::Validate;// Import serde_json Error
-use schemars::JsonSchema;
-use crate::traits::OpenAISchema;
+use crate::traits::BaseSchema;
 use validator::ValidateArgs;
 use crate::mode::Mode;
 use crate::enums::Error;
@@ -33,7 +28,7 @@ impl Patch {
     ) -> Result<InstructorResponse<A, T>, Error>
 
     where
-        T: ValidateArgs<'static, Args=A> + Serialize + for<'de> Deserialize<'de> + JsonSchema + OpenAISchema<A,T>,
+        T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
         A: 'static + Copy,
     {
         // if no mode is provided, default to Mode::JSON
