@@ -50,8 +50,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     
     let result = patched_client.chat_completion(
-        Some(IterableOrSingle::Iterable(TestStruct::default())),
-        Some(1),
+        IterableOrSingle::Single(TestStruct::default()),
+        1,
         1,
         req
     );
@@ -59,9 +59,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match result {
         Ok(response) => {
             match response {
-                instructor_rs::enums::InstructorResponse::Completion(data) => {
-                    println!("InstructorResponse::Completion{:?}", data);
-                }
                 instructor_rs::enums::InstructorResponse::One(e) => {
                     println!("InstructorResponse::Model {:?}", e);
                 }
@@ -74,9 +71,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("got error: {:?}", e);
         }
     }
-
-    
-
 
     Ok(())
 }

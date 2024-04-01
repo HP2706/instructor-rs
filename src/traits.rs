@@ -108,13 +108,9 @@ where
     where
         Self: Sized + ValidateArgs<'static> + BaseSchema<T>,
     {
-        println!("parse_json called with message {}", completion.choices[0].message.content.clone().unwrap());
         let text = completion.choices[0].message.content.clone().unwrap();
         let json_extract = extract_json_from_codeblock(&text);
-        println!("json_extract: {}", json_extract);
-
         let res = Self::model_validate_json(model, &json_extract, validation_context);
-        println!("validation result: {:?}", res);
         res
     }
 }

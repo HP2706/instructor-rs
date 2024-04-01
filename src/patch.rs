@@ -4,6 +4,7 @@ use crate::enums::IterableOrSingle;
 use crate::retry::retry_sync;
 use openai_api_rs::v1::api::Client;
 use openai_api_rs::v1::chat_completion::ChatCompletionRequest;
+use openai_api_rs::v1::chat_completion::ChatCompletionResponse;
 
 use crate::traits::BaseSchema;
 use validator::ValidateArgs;
@@ -19,10 +20,11 @@ pub struct Patch {
 }
 
 impl Patch {
+
     pub fn chat_completion<T, A>(
         &self, 
-        response_model: Option<IterableOrSingle<T>>,
-        validation_context: Option<A>,
+        response_model:IterableOrSingle<T>,
+        validation_context: A,
         max_retries: usize,
         kwargs: ChatCompletionRequest
     ) -> Result<InstructorResponse<A, T>, Error>
@@ -38,7 +40,7 @@ impl Patch {
         };
 
         let (response_model, mut kwargs) = handle_response_model(
-            Some(response_model.unwrap()), 
+            response_model, 
             mode, 
             kwargs
         ).map_err(|e| e)?;
@@ -56,6 +58,7 @@ impl Patch {
             self.mode.unwrap(),
         );
     }
+    
 }
 
 

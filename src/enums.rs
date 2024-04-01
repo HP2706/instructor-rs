@@ -32,11 +32,11 @@ impl fmt::Display for Error {
 }
 
 
+#[derive(Debug)]
 pub enum InstructorResponse<A, T>
     where T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
     A: 'static + Copy,
 {
-    Completion(ChatCompletionResponse),
     One(T),
     Many(Vec<T>),
 }

@@ -12,9 +12,10 @@ use crate::enums::InstructorResponse;
 use crate::enums::IterableOrSingle;
 
 pub fn reask_messages(
-    response: &ChatCompletionResponse, mode: Mode, exception: impl fmt::Display
-) -> impl Iterator<Item = ChatCompletionMessage> {
-
+    response: &ChatCompletionResponse,
+    mode: Mode,
+    exception: impl fmt::Display,
+) -> Vec<ChatCompletionMessage> {
     let first_message = &response.choices[0].message;
     let message = ChatCompletionMessage {
         role: first_message.role.clone(),
@@ -22,85 +23,78 @@ pub fn reask_messages(
         name: None,
     };
     let mut messages: Vec<ChatCompletionMessage> = vec![message];
-    //TODO fix this
+
     match mode {
         Mode::MD_JSON => {
-            messages.push(
-                ChatCompletionMessage {
-                    role: MessageRole::user,
-                    content: Content::Text(format!(
-                        "Correct your JSON ONLY RESPONSE, based on the following errors:\n{}",
-                        exception
-                    )),
-                    name: None,
-                }
-            );
+            messages.push(ChatCompletionMessage {
+                role: MessageRole::user,
+                content: Content::Text(format!(
+                    "Correct your JSON ONLY RESPONSE, based on the following errors:\n{}",
+                    exception
+                )),
+                name: None,
+            });
         }
         _ => {
-            messages.push(
-                ChatCompletionMessage {
-                    role: MessageRole::user,
-                    content: Content::Text(format!(
-                        "Recall the function correctly, fix the errors, exceptions found\n{}",
-                        exception
-                    )),
-                    name: None,
-                }
-            );
+            messages.push(ChatCompletionMessage {
+                role: MessageRole::user,
+                content: Content::Text(format!(
+                    "Recall the function correctly, fix the errors, exceptions found\n{}",
+                    exception
+                )),
+                name: None,
+            });
         }
     }
 
-    messages.into_iter()
+    messages
 }
 
-
-pub fn retry_sync<'v_a, 'f, T, A>(
+pub fn retry_sync<'f, T, A>(
     func: Box<dyn Fn(ChatCompletionRequest) -> Result<ChatCompletionResponse, APIError> + 'f>,
-    response_model: Option<IterableOrSingle<T>>,
-    validation_context: Option<A>,
-    kwargs : &mut ChatCompletionRequest, 
+    response_model: IterableOrSingle<T>,
+    validation_context: A,
+    kwargs: &mut ChatCompletionRequest,
     max_retries: usize,
     mode: Mode,
 ) -> Result<InstructorResponse<A, T>, Error>
 where
-    T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
+    T: ValidateArgs<'static, Args = A> + BaseSchema<T>,
     A: 'static + Copy,
 {
     let mut attempt = 0;
 
     while attempt < max_retries {
-        let response = &func(kwargs.clone());
+        let response = func(kwargs.clone());
         match response {
-            Ok(response) => {
-
+            Ok(_response) => {
                 let result = process_response(
-                    response, &response_model, false, validation_context.as_ref().unwrap(), mode
+                    &_response,
+                    &response_model,
+                    false,
+                    &validation_context,
+                    mode,
                 );
-                println!("processed response: {:?}", result);
+
                 match result {
-                    Ok(result) => {
-                        match result {
-                            item => return Ok(InstructorResponse::One(item)),
-                            _ => {
-                                return Err(Error::Generic("Error not handled".to_string()));
-                            },
-                        }
-                    }
+                    Ok(result) => return Ok(result),
                     Err(e) => {
                         println!("Error: {}", e);
-                        let messages = reask_messages(&response, mode, e);
+                        let messages = reask_messages(&_response, mode, e);
                         println!("number of messages before: {}", kwargs.messages.len());
                         kwargs.messages.extend(messages);
                         println!("number of messages after: {}", kwargs.messages.len());
                         attempt += 1;
+                        continue;
                     }
                 }
             }
             Err(e) => {
-                println!("rety_sync Error: {}", e);
+                println!("retry_sync Error: {}", e);
                 return Err(Error::Generic(format!("Error: {}", e).to_string()));
             }
         }
     }
+
     Err(Error::Generic("Max retries exceeded".to_string()))
 }
