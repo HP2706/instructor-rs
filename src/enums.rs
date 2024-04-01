@@ -32,15 +32,26 @@ impl fmt::Display for Error {
 }
 
 
-
 pub enum InstructorResponse<A, T>
     where T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
     A: 'static + Copy,
 {
     Completion(ChatCompletionResponse),
-    Model(IterableOrSingle<T>),
+    One(T),
+    Many(Vec<T>),
 }
 
+
+impl<T> IterableOrSingle<T>
+where T: ValidateArgs<'static>
+{
+    // This method is now correctly placed outside the ValidateArgs trait impl block
+    pub fn unwrap(self) -> T {
+        match self {
+            IterableOrSingle::Iterable(item) | IterableOrSingle::Single(item) => item,
+        }
+    }
+}
 
 #[derive(Debug, Deserialize, Serialize, Copy, Clone, JsonSchema)]
 pub enum IterableOrSingle<T>

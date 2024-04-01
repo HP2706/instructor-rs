@@ -119,29 +119,34 @@ where
 
 pub fn process_response<T, A>(
     response: &ChatCompletionResponse,
-    response_model : &Option<T>,
+    response_model : &Option<IterableOrSingle<T>>,
     stream: bool,
     validation_context: &A,
     mode: Mode,
-) -> Result<IterableOrSingle<T>, Error>
+) -> Result<T, Error>
 where
     T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
     A: 'static + Copy,
 {
-
-    /* if response_model.is_none() {
-        return Ok(InstructorResponse::Completion(response));
-    }
-    */
-
-    let response_model = response_model.as_ref().unwrap();
-    let res : Result<T, Error> = T::from_response(response, validation_context, mode);
-    let model = match res {
-        Ok(model) => model,
-        Err(e) => {
-            return Err(e);
-        }
+    match response_model {
+        Some(model) => {
+            let res : Result<T, Error> = T::from_response(&model.unwrap(), response, validation_context, mode);
+            return match res {
+                Ok(model) => {
+                    println!("process_response result: {:?}", model);
+                    Ok(model)
+                },
+                Err(e) => {
+                    return Err(e);
+                }
     };
-
-    Err(Error::NotImplementedError("This feature is not yet implemented.".to_string()))
+        }
+        
+        None => {
+            return Err(
+                Error::NotImplementedError("Response model is required.".to_string())
+            );
+        }
+    }
+    
 }

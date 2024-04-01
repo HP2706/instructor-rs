@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         //value: description
         #[schemars(description = "An integer value with a special purpose")]
         #[validate(custom(function = "validate", arg = "( i64)"))]
-        value: i64,
+        price: i64,
     }        
     
 
@@ -39,12 +39,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let schema = TestStruct::openai_schema();
     println!("{}", schema);
 
-    /*
+    
     let req = ChatCompletionRequest::new(
         GPT4_TURBO_PREVIEW.to_string(),
         vec![chat_completion::ChatCompletionMessage {
             role: chat_completion::MessageRole::user,
-            content: chat_completion::Content::Text(String::from("What is Bitcoin?")),
+            content: chat_completion::Content::Text(String::from("price of Bitcoin?")),
             name: None,
         }],
     );
@@ -54,7 +54,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(1),
         1,
         req
-    ); */
+    );
+
+    match result {
+        Ok(response) => {
+            match response {
+                instructor_rs::enums::InstructorResponse::Completion(data) => {
+                    println!("InstructorResponse::Completion{:?}", data);
+                }
+                instructor_rs::enums::InstructorResponse::One(e) => {
+                    println!("InstructorResponse::Model {:?}", e);
+                }
+                _ => {
+                    println!("not implemented yet");
+                }
+            }
+        }
+        Err(e) => {
+            println!("got error: {:?}", e);
+        }
+    }
+
     
 
 

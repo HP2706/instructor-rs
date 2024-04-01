@@ -72,19 +72,22 @@ where
         let response = &func(kwargs.clone());
         match response {
             Ok(response) => {
+
                 let result = process_response(
                     response, &response_model, false, validation_context.as_ref().unwrap(), mode
                 );
-
+                println!("processed response: {:?}", result);
                 match result {
                     Ok(result) => {
                         match result {
-                            IterableOrSingle::Single(item) => return Ok(InstructorResponse::Model(item)),
-                            IterableOrSingle::Iterable(items) => {
+                            item => return Ok(InstructorResponse::One(item)),
+                            _ => {
+                                return Err(Error::Generic("Error not handled".to_string()));
                             },
                         }
                     }
                     Err(e) => {
+                        println!("Error: {}", e);
                         let messages = reask_messages(&response, mode, e);
                         println!("number of messages before: {}", kwargs.messages.len());
                         kwargs.messages.extend(messages);
@@ -94,6 +97,7 @@ where
                 }
             }
             Err(e) => {
+                println!("rety_sync Error: {}", e);
                 return Err(Error::Generic(format!("Error: {}", e).to_string()));
             }
         }
