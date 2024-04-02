@@ -16,4 +16,5 @@ validator = { version = "0.16", features = ["derive"] }
 openai-api-rs = "4.0.8"
 
 syn = {version = "2.0.55", features = ["full"]}
+garde = "0.18.0"
 

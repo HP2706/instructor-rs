@@ -16,6 +16,7 @@ pub enum Error {
     NotImplementedError(String),
     APIError(String),
     Generic(String),
+    JsonExtractionError(String),
 }
 
 impl fmt::Display for Error {
@@ -27,9 +28,12 @@ impl fmt::Display for Error {
             Error::NotImplementedError(ref err) => write!(f, "Not implemented: {}", err),
             Error::APIError(ref err) => write!(f, "API error: {}", err),
             Error::Generic(ref err) => write!(f, "Error: {}", err),
+            Error::JsonExtractionError(ref err) => write!(f, "Error: {}", err),
         }
     }
 }
+
+//TODO implement more traits for the enum, for multiprocessing and ...
 
 
 #[derive(Debug)]

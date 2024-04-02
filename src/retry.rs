@@ -29,7 +29,7 @@ pub fn reask_messages(
             messages.push(ChatCompletionMessage {
                 role: MessageRole::user,
                 content: Content::Text(format!(
-                    "Correct your JSON ONLY RESPONSE, based on the following errors:\n{}",
+                    "Correct your JSON ONLY RESPONSE, based on the following errors:\n{}\n",
                     exception
                 )),
                 name: None,
@@ -56,6 +56,7 @@ pub fn retry_sync<'f, T, A>(
     validation_context: A,
     kwargs: &mut ChatCompletionRequest,
     max_retries: usize,
+    stream : bool,
     mode: Mode,
 ) -> Result<InstructorResponse<A, T>, Error>
 where
@@ -65,13 +66,16 @@ where
     let mut attempt = 0;
 
     while attempt < max_retries {
+        println!("message to model\n\n {:?}", kwargs.messages);
+        println!("attempt: {}", attempt);
         let response = func(kwargs.clone());
         match response {
             Ok(_response) => {
+                println!("model responded with: {}", _response.choices[0].message.content.clone().unwrap());
                 let result = process_response(
                     &_response,
                     &response_model,
-                    false,
+                    stream,
                     &validation_context,
                     mode,
                 );

@@ -1,9 +1,6 @@
 use validator::ValidateArgs;
-
-
 use openai_api_rs::v1::chat_completion::ChatCompletionResponse;
 use crate::mode::Mode;
-
 use openai_api_rs::v1::chat_completion::{
     ChatCompletionRequest, ChatCompletionMessage, 
     MessageRole, Content
@@ -30,8 +27,8 @@ where
                     Error::NotImplementedError("Response model is required for streaming.".to_string())
                 );
             }
-            T::openai_schema()
             
+            format!("Make sure for each schema to return an instance of the JSON, not the schema itself, use commas to seperate the schema/schemas: {:?}", T::openai_schema())
         },
         IterableOrSingle::Single(_) => T::openai_schema(),
     };
@@ -122,50 +119,29 @@ pub fn process_response<T, A>(
 where
     T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
     A: 'static + Copy,
-{
-
-    match response_model {
-        IterableOrSingle::Single(model) => {
-            let model = process_one_response(response, model, stream, validation_context, mode);
-            match model {
-                Ok(model) => {
-                    return Ok(InstructorResponse::One(model));
-                }
-                Err(e) => {
-                    return Err(e);
-                }
-            }
-        }
-        IterableOrSingle::Iterable(model) => {
-            return Err(
-                Error::NotImplementedError("Response model for iterable is not implemnted.".to_string())
-            );
-        }
-    }
+{   
     
-}
 
-fn process_one_response<T, A>(
-    response: &ChatCompletionResponse,
-    response_model : &T,
-    stream: bool,
-    validation_context: &A,
-    mode: Mode,
-) -> Result<T, Error>
-where
-    T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
-    A: 'static + Copy,
-{
-    let res : Result<T, Error> = T::from_response(response_model, response, validation_context, mode);
-    return match res {
-        Ok(model) => {
-            println!("process_response result: {:?}", model);
-            Ok(model)
-        },
-        Err(e) => {
-            return Err(e);
-        }
-    }
+    /* 
+    //TODO
+    if response_model is None:
+        logger.debug("No response model, returning response as is")
+        return response
+
+    if (
+        inspect.isclass(response_model)
+        and issubclass(response_model, (IterableBase, PartialBase))
+        and stream
+    ):
+        model = response_model.from_streaming_response(
+            response,
+            mode=mode,
+        )
+        return model
+    */
+
+    return T::from_response(response_model, response, validation_context, mode);
+    
 }
 
 /* fn extract_response_model<T>(
