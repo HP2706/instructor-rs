@@ -45,6 +45,19 @@ pub enum InstructorResponse<A, T>
     Many(Vec<T>),
 }
 
+impl<A, T> InstructorResponse<A, T>
+where
+    T: ValidateArgs<'static, Args = A> + BaseSchema<T>,
+    A: 'static + Copy,
+{
+    pub fn unwrap(self) -> T {
+        match self {
+            InstructorResponse::One(item) => item,
+            InstructorResponse::Many(mut items) => items.pop().expect("InstructorResponse::Many should not be empty"),
+        }
+    }
+}
+
 
 impl<T> IterableOrSingle<T>
 where T: ValidateArgs<'static>
@@ -97,3 +110,5 @@ pub fn use_iterable_wrapper<T>(wrapper: Iterable<T>) {
         },
     }
 }
+
+
