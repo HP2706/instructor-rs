@@ -12,7 +12,7 @@ mod tests {
     pub fn model_validate_json_no_args() {
         #[derive(
             JsonSchema, serde::Serialize, Debug, Default, 
-            validator::Validate, serde::Deserialize, Clone, Copy
+            validator::Validate, serde::Deserialize, Clone
         )]
         struct Number {
             //value: description
@@ -44,7 +44,7 @@ mod tests {
     pub fn model_validate_json_with_args() {
         #[derive(
             JsonSchema, serde::Serialize, Debug, Default, 
-            validator::Validate, serde::Deserialize, Clone, Copy
+            validator::Validate, serde::Deserialize, Clone
         )]
         struct Number {
             //value: description

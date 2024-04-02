@@ -11,10 +11,10 @@ use crate::mode::Mode;
 use crate::utils::extract_json_from_codeblock;
 use std::fmt::Debug;
 
-pub trait BaseSchema<T>: 'static + Debug + Copy + Serialize + for<'de> Deserialize<'de> + ValidateArgs<'static> + JsonSchema + Sized {}
+pub trait BaseSchema<T>: 'static + Debug + Serialize + for<'de> Deserialize<'de> + ValidateArgs<'static> + JsonSchema + Sized {}
 
 impl<T> BaseSchema<T> for T
-where T: 'static + Copy + Debug + Serialize + for<'de> Deserialize<'de> + ValidateArgs<'static> + JsonSchema + Sized
+where T: 'static + Debug + Serialize + for<'de> Deserialize<'de> + ValidateArgs<'static> + JsonSchema + Sized
 {}
 
 pub trait OpenAISchema<Args, T> 
