@@ -5,7 +5,7 @@ use openai_api_rs::v1::chat_completion::{self, ChatCompletionRequest};
 use std::{env, vec};
 use instructor_rs::mode::Mode;  
 use instructor_rs::patch::Patch;
-use instructor_rs::enums::IterableOrSingle;
+use instructor_rs::iterable::IterableOrSingle;
 
 
 ///we use rust macros to derive certain traits in order to serialize/deserialize format as json and Validate
@@ -51,6 +51,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         req,
     );
     println!("{:?}", result);
+    ///Ok(InstructorResponse::Single(
+    /// Actor { name: "Leonardo DiCaprio", 
+    /// age: 49, 
+    /// movies: vec![String::from("Django unchained"), String::from("Once upon a time in holywood"), String::from("Titanic")] })
+    /// )
     Ok(())
 }
 

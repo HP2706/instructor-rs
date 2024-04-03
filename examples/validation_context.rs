@@ -6,7 +6,7 @@ use validator::ValidationError;
 use std::{env, vec};
 use instructor_rs::mode::Mode;  
 use instructor_rs::patch::Patch;
-use instructor_rs::enums::IterableOrSingle;
+use instructor_rs::iterable::IterableOrSingle;
 
 
 ///we use rust macros to derive certain traits in order to serialize/deserialize format as json and Validate
@@ -18,8 +18,10 @@ struct Director {
     ///We annotate the fields with the description of the field like you would do Field(..., description = "...") in pydantic
     #[schemars(description = "A string value representing the name of the person")]
     name : String,
+    
     #[schemars(description = "The age of the director, the age of the director must be a multiple of 3")]
     #[validate(custom(function = "check_is_multiple", arg = "i64"))]
+    ///we define custom validation function that can take in foreign input and perform validation logic based on input
     age : i64,
     #[schemars(description = "year of birth")] 
     birth_year : i64
@@ -56,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         req,
     );
     println!("{:?}", result);
-    /// { name: "Steven Spielberg", age: 77, birth_year: 1946 }
+    /// Ok(InstructorResponse::Single({ name: "Steven Spielberg", age: 77, birth_year: 1946 }))
     Ok(())
 }
 

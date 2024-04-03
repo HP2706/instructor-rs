@@ -6,23 +6,18 @@ use validator::ValidationError;
 use std::{env, vec};
 use instructor_rs::mode::Mode;  
 use instructor_rs::patch::Patch;
-use instructor_rs::enums::IterableOrSingle;
+use instructor_rs::iterable::IterableOrSingle;
 
-///we use rust macros to derive certain traits in order to serialize/deserialize format as json and Validate
+///we derive these macros in order to use the Openai_schema trait which has all the model validation logic
 #[derive(
     JsonSchema, serde::Serialize, Debug, Default, 
     validator::Validate, serde::Deserialize, Clone 
 )]
 struct Movies {
-    /* #[schemars(description = "A list of movies that are bloody and or rough")]
-    #[validate(length(min = 5, message = "movies must contain exactly 5 items"))]
-    bloody_movies : Vec<String>,
-    #[schemars(description = "A list of movies that are soft and or romantic")] */
     #[validate(length(min = 5, message = "movies must contain exactly 5 items"))]
     #[validate(custom(function = "check_are_soft"))]
     soft_movies : Vec<String>,
 }
-
 
 #[derive(
     JsonSchema, serde::Serialize, Debug, Default, 
@@ -33,7 +28,8 @@ struct IsSoft {
     content : bool
 }
 
-
+///we define our validation function for the soft_movies field
+/// This function calls an llm and checks if all movies are soft and or romantic
 fn check_are_soft(value: &Vec<String>) -> Result<(), ValidationError> {
     let client = Client::new(env::var("OPENAI_API_KEY").unwrap().to_string());
     let patched_client = Patch { client, mode: Some(Mode::JSON) };
@@ -57,6 +53,7 @@ fn check_are_soft(value: &Vec<String>) -> Result<(), ValidationError> {
         req,
     );
     
+    ///we match the result of the llm call
     match result {
         Ok(res) => {
             match res.unwrap().content {
