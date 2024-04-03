@@ -1,6 +1,6 @@
 
 use crate::process_response::handle_response_model;
-use crate::enums::IterableOrSingle;
+use crate::iterable::IterableOrSingle;
 use crate::retry::retry_sync;
 use openai_api_rs::v1::api::Client;
 use openai_api_rs::v1::chat_completion::ChatCompletionRequest;
@@ -44,6 +44,7 @@ impl Patch {
             mode, 
             kwargs
         ).map_err(|e| e)?;
+        
 
         let func = Box::new(|kwargs| {
             self.client.chat_completion(kwargs)

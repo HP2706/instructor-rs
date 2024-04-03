@@ -2,7 +2,7 @@ use instructor_rs::traits::OpenAISchema;
 use schemars::JsonSchema;
 use validator::ValidationError;
 use std::clone::Clone;
-use instructor_rs::enums::IterableOrSingle;
+use instructor_rs::iterable::IterableOrSingle;
 
 #[cfg(test)]
 mod tests {
@@ -91,7 +91,40 @@ mod tests {
             Err(_) => {
                 assert_eq!(false, false)},
         }
-
     }
+
+    #[test]
+    pub fn parse_json(){
+        
+        #[derive(
+            JsonSchema, serde::Serialize, Debug, Default, 
+            validator::Validate, serde::Deserialize, Clone
+        )]
+        struct TestStruct {
+            value1: i64,
+        }       
+
+        let positive_example = "{\"value1\": 10}";
+        let positive_out = TestStruct::model_validate_json(
+            &IterableOrSingle::Iterable(TestStruct::default()), 
+            positive_example, 
+            &()
+        );
+        let negative_example = "{\"value1\": \"hello\"}";
+        assert_eq!(false, true);
+    }
+
+    #[test]
+    pub fn parse_tools(){
+        //TODO
+        assert_eq!(false, true);
+    }
+
+    #[test]
+    pub fn parse_functions(){
+        //TODO
+        assert_eq!(false, true);
+    }
+
 }
 

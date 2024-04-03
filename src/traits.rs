@@ -1,21 +1,28 @@
 use schemars::JsonSchema;
 use validator::ValidateArgs;
 use serde::{Deserialize, Serialize};
-use openai_api_rs::v1::chat_completion::ChatCompletionResponse;
+use openai_api_rs::v1::chat_completion::{ChatCompletionResponse, ToolCall};
 use crate::enums::{
-    Error,
-    InstructorResponse,
-    IterableOrSingle
+    Error, InstructorResponse
 };
+use openai_api_rs::v1::chat_completion::{
+    Function, FunctionParameters, JSONSchemaDefine, JSONSchemaType
+};
+
+use crate::iterable::IterableOrSingle;
 use crate::mode::Mode;
 use crate::utils::extract_json_from_codeblock;
+use std::collections::HashMap;
 use std::fmt::Debug;
+use std::any::type_name;
+
 
 pub trait BaseSchema<T>: 'static + Debug + Serialize + for<'de> Deserialize<'de> + ValidateArgs<'static> + JsonSchema + Sized {}
 
 impl<T> BaseSchema<T> for T
-where T: 'static + Debug + Serialize + for<'de> Deserialize<'de> + ValidateArgs<'static> + JsonSchema + Sized
-{}
+where T: 'static + Debug + Serialize + for<'de> Deserialize<'de> + ValidateArgs<'static> + JsonSchema + Sized {}
+
+
 
 pub trait OpenAISchema<Args, T> 
 where
@@ -24,6 +31,8 @@ where
 {
     type Args : 'static + Copy;
     fn openai_schema() -> String; 
+
+    fn tool_schema() -> Function;
  
     fn model_validate_json(
         model : &IterableOrSingle<Self>, 
@@ -49,6 +58,15 @@ where
     ) -> Result<InstructorResponse<Args, T>, Error>
     where
         Self: Sized + ValidateArgs<'static> + BaseSchema<T>;
+
+    fn parse_tools(
+        model: &IterableOrSingle<Self>,
+        completion: &ChatCompletionResponse,
+        validation_context: &Args,
+    ) -> Result<InstructorResponse<Args, T>, Error>
+    where
+        Self: Sized + ValidateArgs<'static> + BaseSchema<T>;
+
 }
 
 impl<A, T> OpenAISchema<A, T> for T
@@ -112,6 +130,67 @@ where
         serde_json::to_string_pretty(&final_schema).unwrap()
     }
 
+    fn tool_schema() -> Function {
+        let schema = schemars::schema_for!(T);
+        let schema_json = serde_json::to_value(&schema).unwrap();
+        let title = schema_json["title"].as_str().unwrap_or_default().to_string();
+    
+        let description = match schema_json["description"].as_str() {
+            Some(desc) => desc.to_string(),
+            None => format!("Correctly extracted `{}` with all the required parameters with correct types", title),
+        };
+    
+        let mut properties: HashMap<String, Box<JSONSchemaDefine>> = HashMap::new();
+        let mut required: Vec<String> = Vec::new();
+    
+        if let Some(props) = schema_json["properties"].as_object() {
+            for (prop_name, prop_value) in props {
+                let mut prop_schema = JSONSchemaDefine {
+                    schema_type: prop_value["type"].as_str().map(|t| match t {
+                        "string" => JSONSchemaType::String,
+                        "integer" => JSONSchemaType::Number,
+                        "float" => JSONSchemaType::Number, 
+                        "number" => JSONSchemaType::Number,
+                        "boolean" => JSONSchemaType::Boolean,
+                        "array" => JSONSchemaType::Array,
+                        "object" => JSONSchemaType::Object,
+                        _ => JSONSchemaType::String,
+                    }),
+                    description: prop_value["description"].as_str().map(|d| d.to_string()),
+                    ..Default::default()
+                };
+    
+                if let Some(all_of) = prop_value["allOf"].as_array() {
+                    if let Some(ref_value) = all_of[0]["$ref"].as_str() {
+                        if let Some(def_name) = ref_value.split('/').last() {
+                            if let Some(def_value) = schema_json["definitions"][def_name].as_object() {
+                                if let Some(enum_values) = def_value["enum"].as_array() {
+                                    prop_schema.enum_values = Some(enum_values.iter().map(|v| v.as_str().unwrap().to_string()).collect());
+                                }
+                            }
+                        }
+                    }
+                }
+    
+                properties.insert(prop_name.to_string(), Box::new(prop_schema));
+            }
+        }
+    
+        if let Some(req) = schema_json["required"].as_array() {
+            required = req.iter().map(|r| r.as_str().unwrap().to_string()).collect();
+        }
+    
+        Function {
+            name: title,
+            description: Some(description),
+            parameters: FunctionParameters {
+                schema_type: JSONSchemaType::Object,
+                properties: Some(properties),
+                required: Some(required),
+            },
+        }
+    }
+
     fn model_validate_json(
         model: &IterableOrSingle<Self>, 
         data: &str, 
@@ -158,6 +237,10 @@ where
             Mode::JSON | Mode::JSON_SCHEMA | Mode::MD_JSON => {
                 Self::parse_json(model, response, validation_context)
             }
+            Mode::TOOLS => {
+                println!("\n\nMode::TOOLS response: {:?}", response);
+                return Self::parse_tools(model, response, validation_context);
+            }
             _ => Err(Error::NotImplementedError(
                 "This feature is not yet implemented.".to_string(),
             )),
@@ -184,8 +267,54 @@ where
                 return Err(e);
             }
         }
+    }
 
-        
+    fn parse_tools(
+        model: &IterableOrSingle<Self>,
+        completion: &ChatCompletionResponse,
+        validation_context: &Self::Args,
+    ) -> Result<InstructorResponse<Self::Args, T>, Error>
+    where
+        Self: Sized + ValidateArgs<'static> + BaseSchema<T>,
+    {
+        let message = &completion.choices[0].message;
+        match model {
+            IterableOrSingle::Single(_) => {
+                match &message.tool_calls {
+                    Some(tool_calls) => {
+                        if tool_calls.len() != 1 {
+                            return Err(Error::Generic("Expected exactly one tool call".to_string()));
+                        }
+                        let tool_call = &tool_calls[0];
+                        let out = check_tool_call::<T>(tool_call).unwrap();
+                        return Self::model_validate_json(model, &out, validation_context);
+                    }
+                    None => Err(Error::Generic("No tool calls found".to_string())),
+                }
+            }
+            IterableOrSingle::Iterable(_) => {
+                match &message.tool_calls {
+                    Some(tool_calls) => {
+                        let tool_strings : Result<Vec<String>, Error>  = tool_calls
+                            .iter()
+                            .map(|tool_call| {
+                                check_tool_call::<T>(tool_call)
+                            }).collect::<Result<Vec<String>, Error>>();
+                        
+                        match tool_strings {
+                            Ok(tool_strings) => {
+                                //we merge string into one str separted by comma
+                                let merged_str = tool_strings.join(",");
+                                Self::model_validate_json(model, &merged_str, validation_context)
+                            }
+                            Err(e) => Err(e),
+                        }
+                    
+                    }
+                    None => Err(Error::Generic("No tool calls found".to_string())),
+                }
+            }
+        }
     }
 }
 
@@ -201,15 +330,19 @@ where
     }
 }
 
-
-/* pub trait IterableBase<Args, T> 
-where
-    T: ValidateArgs<'static, Args=Args> + OpenAISchema<Args, T> + BaseSchema<T>,
-    Args: 'static + Copy,
+fn check_tool_call<T>(tool_call: &ToolCall) -> Result<String, Error> 
 {
-    type Args: 'static + Copy;
+    let tool_name = tool_call.function.name.as_ref().unwrap();
+    let model_name = type_name::<T>().split("::").last().unwrap();
+    if tool_name != model_name {
+        return Err(Error::Generic(format!(
+            "tool call name: {} does not match model name: {}",
+            tool_name, model_name
+        )));
+    }
+    if tool_call.function.arguments.as_ref().is_none() {
+        return Err(Error::Generic(format!("tool call arguments are empty in tool {:?}", tool_call)));
+    }
+    Ok(tool_call.function.arguments.as_ref().unwrap().to_string())
+}
 
-    fn tasks_from_chunks(
-
-    )
-} */

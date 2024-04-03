@@ -9,7 +9,7 @@ use openai_api_rs::v1::chat_completion::{
 use std::fmt;
 use openai_api_rs::v1::error::APIError;
 use crate::enums::InstructorResponse;
-use crate::enums::IterableOrSingle;
+use crate::iterable::IterableOrSingle;
 
 pub fn reask_messages(
     response: &ChatCompletionResponse,
@@ -17,9 +17,12 @@ pub fn reask_messages(
     exception: impl fmt::Display,
 ) -> Vec<ChatCompletionMessage> {
     let first_message = &response.choices[0].message;
+    
+    
+    
     let message = ChatCompletionMessage {
         role: first_message.role.clone(),
-        content: Content::Text(first_message.content.clone().unwrap()),
+        content: Content::Text(first_message.content.clone().unwrap_or("None".to_string())),
         name: None,
     };
     let mut messages: Vec<ChatCompletionMessage> = vec![message];
@@ -71,7 +74,8 @@ where
         let response = func(kwargs.clone());
         match response {
             Ok(_response) => {
-                println!("model responded with: {}", _response.choices[0].message.content.clone().unwrap());
+
+                println!("model responded with: {:?}", _response.choices[0].message.content.clone());
                 let result = process_response(
                     &_response,
                     &response_model,

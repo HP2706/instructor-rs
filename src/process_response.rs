@@ -6,9 +6,11 @@ use openai_api_rs::v1::chat_completion::{
     MessageRole, Content
 };
 use crate::traits::{OpenAISchema, BaseSchema};
-use crate::enums::{Error, IterableOrSingle};
+use crate::enums::Error;
+use crate::iterable::IterableOrSingle;
 use std::collections::HashMap;
 use crate::enums::InstructorResponse;
+use openai_api_rs::v1::chat_completion::{Tool, ToolType, Function};
 
 pub fn handle_response_model<A, T>(
     response_model: IterableOrSingle<T>, 
@@ -20,32 +22,30 @@ where
     A: 'static + Copy,
 {
     let mut new_kwargs = kwargs.clone();
-    let schema = match response_model {
-        IterableOrSingle::Iterable(_) => {
-            if kwargs.stream == Some(true) {
-                return Err(
-                    Error::NotImplementedError("Response model is required for streaming.".to_string())
-                );
-            }
-            
-            format!("Make sure for each schema to return an instance of the JSON, not the schema itself, use commas to seperate the schema/schemas: {:?}", T::openai_schema())
-        },
-        IterableOrSingle::Single(_) => T::openai_schema(),
-    };
-
+    
     match mode {
-        Mode::FUNCTIONS => {
-            //TODO
-            //from instructor python
-            // new_kwargs["functions"] = [response_model.openai_schema]  # type: ignore
-            // new_kwargs["function_call"] = {"name": response_model.openai_schema["name"]}  # type: ignore
-        },
-        Mode::TOOLS | Mode::MISTRAL_TOOLS => {
-            //let func = Function { Function::new(response_model.openai_schema.name.clone()) };
-            //let tool = Tool { ToolType::Function, response_model.openai_schema.name.clone() };
-            //kwargs.tools(vec![tool])  
+        Mode::TOOLS => {
+            new_kwargs.tools = Some(vec![
+                Tool {
+                    r#type: ToolType::Function,
+                    function: T::tool_schema(),
+                }
+            ]);
         },
         Mode::JSON | Mode::MD_JSON | Mode::JSON_SCHEMA => {
+            let schema = match response_model {
+                IterableOrSingle::Iterable(_) => {
+                    if kwargs.stream == Some(true) {
+                        return Err(
+                            Error::NotImplementedError("Response model is required for streaming.".to_string())
+                        );
+                    }
+                    
+                    format!("Make sure for each schema to return an instance of the JSON, not the schema itself, use commas to seperate the schema/schemas: {:?}", T::openai_schema())
+                },
+                IterableOrSingle::Single(_) => T::openai_schema(),
+            };
+
             let message = format!(
                 "As a genius expert, your task is to understand the content and provide \
                 the parsed objects in json that match the following json_schema:\n\n\
@@ -104,6 +104,7 @@ where
             } 
         }  
     }
+
     return Ok((response_model, new_kwargs));
         
     

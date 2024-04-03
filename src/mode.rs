@@ -8,9 +8,7 @@ pub enum Mode {
     MD_JSON,
     JSON_SCHEMA,
     //ANTHROPIC_TOOLS, TODO
-    FUNCTIONS,
     TOOLS,
-    MISTRAL_TOOLS,
 }
 
 impl fmt::Display for Mode {
@@ -20,9 +18,7 @@ impl fmt::Display for Mode {
             Mode::MD_JSON => "markdown_json_mode",
             Mode::JSON_SCHEMA => "json_schema_mode",
             //Mode::ANTHROPIC_TOOLS => "anthropic_tools", TODO
-            Mode::FUNCTIONS => "functions",
             Mode::TOOLS => "tools",
-            Mode::MISTRAL_TOOLS => "mistral_tools",
         };
         write!(f, "{}", mode_str)
     }
