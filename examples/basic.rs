@@ -6,13 +6,16 @@ use std::{env, vec};
 use instructor_rs::mode::Mode;  
 use instructor_rs::patch::Patch;
 use instructor_rs::iterable::IterableOrSingle;
+use model_traits_macro::derive_all;
+use serde::{Deserialize, Serialize};
+use validator::Validate;
 
-
+#[derive_all]
 ///we use rust macros to derive certain traits in order to serialize/deserialize format as json and Validate
-#[derive(
-    JsonSchema, serde::Serialize, Debug, Default, 
-    validator::Validate, serde::Deserialize, Clone 
-)]
+///#[derive(
+///  JsonSchema, Serialize, Debug, Default, 
+///  Validate, Deserialize, Clone 
+///)]
 struct Actor {
     ///We annotate the fields with the description of the field like you would do Field(..., description = "...") in pydantic
     #[schemars(description = "A string value representing the name of the person")]

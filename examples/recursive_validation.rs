@@ -7,12 +7,16 @@ use std::{env, vec};
 use instructor_rs::mode::Mode;  
 use instructor_rs::patch::Patch;
 use instructor_rs::iterable::IterableOrSingle;
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+use model_traits_macro::derive_all;
 
-///we derive these macros in order to use the Openai_schema trait which has all the model validation logic
-#[derive(
-    JsonSchema, serde::Serialize, Debug, Default, 
-    validator::Validate, serde::Deserialize, Clone 
-)]
+#[derive_all]
+///we use rust macros to derive certain traits in order to serialize/deserialize format as json and Validate
+///#[derive(
+///  JsonSchema, Serialize, Debug, Default, 
+///  Validate, Deserialize, Clone 
+///)]
 struct Movies {
     #[validate(length(min = 5, message = "movies must contain exactly 5 items"))]
     #[validate(custom(function = "check_are_soft"))]

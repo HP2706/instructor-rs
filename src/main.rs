@@ -12,7 +12,7 @@ use instructor_rs::enums::InstructorResponse;
 use openai_api_rs::v1::common::GPT4_TURBO_PREVIEW;
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
-
+use model_traits_macro::derive_all;
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,10 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         AM,
     }
 
-    #[derive(
-        JsonSchema, Serialize, Debug, Default, 
-        Validate, Deserialize, Clone
-    )]
+    #[derive_all]
     #[schemars(description = "this is a description of the weather api")]
     struct Weather {
         //#[schemars(description = "am or pm")]
