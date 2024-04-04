@@ -20,6 +20,36 @@ pub fn extract_json_from_codeblock(content: &str) -> Result<String, Error> {
     }
 }
 
+use std::iter::Peekable;
+use std::str::Chars;
+
+pub fn extract_json_from_stream<'a, I>(chunks: I) -> impl Iterator<Item = char> + 'a
+where
+    I: Iterator<Item = &'a str> + 'a,
+{
+    let mut capturing = false;
+    let mut brace_count = 0;
+
+    chunks.flat_map(move |chunk| chunk.chars()).filter_map(move |char| {
+        if char == '{' {
+            capturing = true;
+            brace_count += 1;
+            Some(char)
+        } else if char == '}' && capturing {
+            brace_count -= 1;
+            let output = Some(char);
+            if brace_count == 0 {
+                capturing = false;
+            }
+            output
+        } else if capturing {
+            Some(char)
+        } else {
+            None
+        }
+    })
+}
+
 
 ///these are for better testing
 
