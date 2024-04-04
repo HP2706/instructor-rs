@@ -6,6 +6,11 @@ mod tests {
     use super::*;
 
     #[test]
+    fn dummy_fail() {
+        assert_eq!(1, 2); // this is stupid but cargo wont show the test as failed if all pass
+    }
+
+    #[test]
     fn test_extract_json_from_codeblock_success() {
         let content = "Some text {\"key\": \"value\"} more text";
         let result = extract_json_from_codeblock(content);

@@ -20,9 +20,6 @@ pub fn extract_json_from_codeblock(content: &str) -> Result<String, Error> {
     }
 }
 
-use std::iter::Peekable;
-use std::str::Chars;
-
 pub fn extract_json_from_stream<'a, I>(chunks: I) -> impl Iterator<Item = char> + 'a
 where
     I: Iterator<Item = &'a str> + 'a,
