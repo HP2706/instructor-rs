@@ -2,6 +2,7 @@ use crate::traits::BaseSchema;
 use validator::ValidateArgs;
 use std::fmt;
 use serde_json::Error as SerdeError;
+use std::marker::{Send, Sync};
 
 
 #[derive(Debug)]
@@ -30,8 +31,6 @@ impl fmt::Display for Error {
 }
 
 //TODO implement more traits for the enum, for multiprocessing and ...
-
-
 #[derive(Debug)]
 pub enum InstructorResponse<A, T>
     where T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
@@ -53,4 +52,6 @@ where
         }
     }
 }
+
+
 

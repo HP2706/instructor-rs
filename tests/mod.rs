@@ -1,3 +1,3 @@
 mod utils_test;
-mod OpenaiSchemaTest;
-
+mod enums;
+mod openai_schema_test;

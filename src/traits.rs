@@ -256,9 +256,7 @@ where
         Self: Sized + ValidateArgs<'static> + BaseSchema<T>,
     {
         let text = completion.choices[0].message.content.clone().unwrap();
-        println!("text in parse_json: {:?}", text);
         let json_extract = extract_json_from_codeblock(&text);
-        println!("json_extract: {:?}", json_extract);
         match json_extract {
             Ok(json_extract) => {
                 return Self::model_validate_json(model, &json_extract, validation_context);
@@ -286,7 +284,7 @@ where
                             return Err(Error::Generic("Expected exactly one tool call".to_string()));
                         }
                         let tool_call = &tool_calls[0];
-                        let out = check_tool_call::<T>(tool_call).unwrap();
+                        let out = check_tool_call::<T>(tool_call)?;
                         return Self::model_validate_json(model, &out, validation_context);
                     }
                     None => Err(Error::Generic("No tool calls found".to_string())),
