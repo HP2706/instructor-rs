@@ -8,7 +8,7 @@ use openai_api_rs::v1::chat_completion::{
 };
 use std::fmt;
 use openai_api_rs::v1::error::APIError;
-use crate::enums::InstructorResponse;
+use crate::enums::{InstructorResponse, ChatCompletionResponseWrapper};
 use crate::iterable::IterableOrSingle;
 
 pub fn reask_messages(

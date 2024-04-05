@@ -1,11 +1,13 @@
 use validator::ValidateArgs;
 use crate::mode::Mode;
 use crate::traits::{OpenAISchema, BaseSchema};
-use crate::enums::Error;
+use crate::error::Error;
 use crate::iterable::IterableOrSingle;
 use std::collections::HashMap;
 use crate::enums::InstructorResponse;
-use openai_api_rs::v1::chat_completion::{Tool, ToolType, Function};
+use async_openai::types::{
+    ChatCompletionRequestMessage, ChatCompletionRequestSystemMessage, ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageContent, ChatCompletionResponseFormat, ChatCompletionResponseFormatType, ChatCompletionTool, ChatCompletionToolType, CreateChatCompletionRequest, CreateChatCompletionResponse, Role 
+};
 
 pub fn handle_response_model<A, T>(
     response_model: IterableOrSingle<T>, 
@@ -123,7 +125,7 @@ where
 }
 
 pub fn process_response<T, A>(
-    response: &ChatCompletionResponse,
+    response: &CreateChatCompletionResponse,
     response_model : &IterableOrSingle<T>,
     stream: bool,
     validation_context: &A,
