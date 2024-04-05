@@ -3,7 +3,7 @@ use validator::ValidateArgs;
 use std::fmt;
 use serde_json::Error as SerdeError;
 use std::marker::{Send, Sync};
-
+use crate::streaming::StreamingError;
 
 #[derive(Debug)]
 pub enum Error {
@@ -30,14 +30,33 @@ impl fmt::Display for Error {
     }
 }
 
+
 //TODO implement more traits for the enum, for multiprocessing and ...
-#[derive(Debug)]
+
 pub enum InstructorResponse<A, T>
     where T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
     A: 'static + Copy,
 {
     One(T),
     Many(Vec<T>),
+    Stream(Box<dyn Iterator<Item = Result<T, StreamingError>>>),
+}
+
+pub enum MaybeStream<T> {
+    Stream(Box<dyn Iterator<Item = Result<T, StreamingError>>>),
+    One(T),
+    Many(Vec<T>),
+}
+
+impl<T> MaybeStream<T> {
+    ///gets the first item from the stream, or the first item in the vector, or the first item in the stream
+    pub fn unwrap(self) -> Result<T, StreamingError> {
+        match self {
+            MaybeStream::One(item) => Ok(item),
+            MaybeStream::Many(items) => Ok(items.into_iter().next().unwrap()),
+            MaybeStream::Stream(iter) => iter.into_iter().next().unwrap(),
+        }
+    }
 }
 
 impl<A, T> InstructorResponse<A, T>
@@ -45,10 +64,11 @@ where
     T: ValidateArgs<'static, Args = A> + BaseSchema<T>,
     A: 'static + Copy,
 {
-    pub fn unwrap(self) -> T {
+    pub fn unwrap(self) -> MaybeStream<T> {
         match self {
-            InstructorResponse::One(item) => item,
-            InstructorResponse::Many(mut items) => items.pop().expect("InstructorResponse::Many should not be empty"),
+            InstructorResponse::One(item) => MaybeStream::One(item),
+            InstructorResponse::Many(mut items) => MaybeStream::Many(items),
+            InstructorResponse::Stream(iter) => MaybeStream::Stream(iter),
         }
     }
 }
