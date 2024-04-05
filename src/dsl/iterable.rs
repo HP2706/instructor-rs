@@ -1,13 +1,13 @@
-use validator::ValidateArgs;
-use crate::enums::Error;
-use crate::streaming::StreamingError;
+/* use validator::ValidateArgs;
+use crate::error::Error;
 use crate::iterable::IterableOrSingle;
 use crate::mode::Mode;
 use crate::traits::BaseSchema;
-use crate::streaming::{ChatCompletionResponseWrapper, ChatCompletionStreamingResponse, Delta};
 use crate::traits::OpenAISchema;
 use crate::utils::extract_json_from_stream;
-use crate::enums::InstructorResponse;
+use crate::enums::{InstructorResponse, ChatCompletionResponseWrapper};
+use async_openai::types::{ChatCompletionResponseStream, ChatCompletionStreamResponseDelta};
+use async_openai::error::OpenAIError;
 
 pub trait IterableBase<Args, T> 
 where
@@ -17,15 +17,15 @@ where
     type Args : 'static + Copy;
 
     fn extract_json(
-        completion : Box<dyn Iterator<Item = Result<ChatCompletionStreamingResponse, StreamingError>>>,
+        completion : ChatCompletionResponseStream,
         mode : Mode
-    ) -> Box< dyn Iterator<Item = Result<String, StreamingError>>>
+    ) -> Box< dyn Iterator<Item = Result<String, Error>>>
     where
         Self: Sized + ValidateArgs<'static> + BaseSchema<T>;
 
     fn from_streaming_response(
         model: &IterableOrSingle<Self>,
-        response: Box<dyn Iterator<Item = Result<ChatCompletionStreamingResponse, StreamingError>>>,
+        response: ChatCompletionResponseStream,
         validation_context: &Args,
         mode: Mode,
     ) -> InstructorResponse<Args, T>
@@ -35,6 +35,14 @@ where
     fn tasks_from_chunks(
         model: &IterableOrSingle<Self>,
         json_chunks: Box<dyn Iterator<Item = Result<String, StreamingError>>>,
+        validation_context: &Args
+    ) -> InstructorResponse<Args, T>
+    where
+        Self: Sized + ValidateArgs<'static> + BaseSchema<T>;
+    
+    fn tasks_from_chunks(
+        model: &IterableOrSingle<Self>,
+        json_chunks: Box<dyn Iterator<Item = Result<String, Error>>>,
         validation_context: &Args
     ) -> InstructorResponse<Args, T>
     where
@@ -52,39 +60,39 @@ where
     type Args = A;
 
     fn extract_json(
-        completion : Box<dyn Iterator<Item = Result<ChatCompletionStreamingResponse, StreamingError>>>,
+        completion : ChatCompletionResponseStream,
         mode : Mode
-    ) -> Box< dyn Iterator<Item = Result<String, StreamingError>>>
+    ) -> Box< dyn Iterator<Item = Result<String, Error>>>
     where
         Self: Sized + ValidateArgs<'static> + BaseSchema<T>
     {
         Box::new(completion.filter_map(move |chunk_result| {
             match chunk_result {
                 Ok(chunk) => match chunk {
-                    ChatCompletionStreamingResponse::Chunk(chunk) => {
+                    ChatCompletionResponseStream::CreateChatCompletionStreamResponse(chunk) => {
                         match mode {
                             Mode::JSON | Mode::MD_JSON | Mode::JSON_SCHEMA => {
                                 chunk.choices.get(0).and_then(|choice| {
-                                    match &choice.delta {
-                                        Delta::Content { content } => {
+                                    match &choice.delta.content {
+                                        Some(content) => {
                                             Some(Ok(content.clone()))
                                         },
-                                        Delta::Empty {  } => None,
+                                        None => None,
                                     }
                                 })
                             },
                             Mode::TOOLS => {
                                 //TODO: Implement this (check openai api)
-                                Some(Err(StreamingError::Generic(
+                                Some(Err(Error::Generic(
                                     format!("Mode {:?} is not supported for MultiTask streaming", mode)
                                 )))
                             },
-                            _ => Some(Err(StreamingError::Generic(
+                            _ => Some(Err(Error::Generic(
                                 format!("Mode {:?} is not supported for MultiTask streaming", mode)
                             ))),
                         }
                     },
-                    ChatCompletionStreamingResponse::Done => None,
+                    ChatCompletionResponseStream::OpenAIError(e) => None, //todo think about this
                 },
                 Err(e) => Some(Err(e)),
             }
@@ -93,14 +101,13 @@ where
 
     fn from_streaming_response(
         model: &IterableOrSingle<Self>,
-        response: Box<dyn Iterator<Item = Result<ChatCompletionStreamingResponse, StreamingError>>>,
+        response: ChatCompletionResponseStream,
         validation_context: &Self::Args,
         mode: Mode,
     ) -> InstructorResponse<Self::Args, T>
     { 
-        let mut iter: Box<dyn Iterator<Item = Result<ChatCompletionStreamingResponse, StreamingError>>> = response;
-    
-        let mut json_chunks  = Self::extract_json(iter, mode);
+
+        let mut json_chunks  = Self::extract_json(response, mode);
 
         if mode == Mode::MD_JSON {
             json_chunks = extract_json_from_stream(json_chunks);
@@ -111,7 +118,7 @@ where
 
     fn tasks_from_chunks(
         model: &IterableOrSingle<Self>,
-        json_chunks: Box<dyn Iterator<Item = Result<String, StreamingError>>>,
+        json_chunks: Box<dyn Iterator<Item = Result<String, Error>>>,
         validation_context: &Self::Args
     ) -> InstructorResponse<Self::Args, T>
     where
@@ -128,6 +135,9 @@ where
                             started = true;
                             potential_object = chunk[index + 1..].to_string();
                         }
+                        ChatCompletionStreamingResponse::Done => {
+                            println!("{:?}", "done");
+                        }
                         return None;
                     }
                 },
@@ -143,10 +153,30 @@ where
                         let model = single.unwrap().unwrap().unwrap();
                         Some(Ok(model))
                     },
-                    Err(e) => Some(Err(StreamingError::ModelValidationError(e.to_string()))),
+                    Err(e) => Some(Err(Error::ModelValidationError(e.to_string()))),
                 }
             } else {
                 None
+            }
+        });
+    
+        InstructorResponse::Stream(Box::new(stream))
+    }
+
+    fn get_object(s: &str, mut stack: usize) -> (Option<String>, String) {
+        let start_index = s.find('{');
+        if let Some(start) = start_index {
+            for (i, c) in s.char_indices() {
+                if c == '{' {
+                    stack += 1;
+                } else if c == '}' {
+                    stack -= 1;
+                    if stack == 0 {
+                        // Adjusted slicing to handle Rust's string slice indexing
+                        return (Some(s[start..=i].to_string()), s[i+1..].to_string());
+                    }
+                }
+                Err(e) => eprintln!("Error: {:?}", e),
             }
         });
     
@@ -171,3 +201,4 @@ where
         (None, s.to_string())
     }
 }
+ */

@@ -1,21 +1,15 @@
 use schemars::JsonSchema;
 use validator::ValidateArgs;
 use serde::{Deserialize, Serialize};
-use openai_api_rs::v1::chat_completion::{ChatCompletionResponse, ToolCall};
-use crate::enums::{
-    Error, InstructorResponse
-};
-use openai_api_rs::v1::chat_completion::{
-    Function, FunctionParameters, JSONSchemaDefine, JSONSchemaType
-};
-
+use std::fmt::Debug;
+use std::any::type_name;
+use crate::error::Error;
+use crate::enums::InstructorResponse;
 use crate::iterable::IterableOrSingle;
 use crate::mode::Mode;
 use crate::utils::extract_json_from_codeblock;
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::any::type_name;
-
+use async_openai::types::CreateChatCompletionResponse;
+use async_openai::types::{ChatCompletionMessageToolCall, FunctionObject };
 
 pub trait BaseSchema<T>: 'static + Debug + Serialize + for<'de> Deserialize<'de> + ValidateArgs<'static> + JsonSchema + Sized {}
 
@@ -32,7 +26,7 @@ where
     type Args : 'static + Copy;
     fn openai_schema() -> String; 
 
-    fn tool_schema() -> Function;
+    fn tool_schema() -> FunctionObject;
  
     fn model_validate_json(
         model : &IterableOrSingle<Self>, 
@@ -44,7 +38,7 @@ where
     
     fn from_response(
         model: &IterableOrSingle<Self>,
-        response: &ChatCompletionResponse,
+        response: &CreateChatCompletionResponse,
         validation_context: &Args,
         mode: Mode,
     ) -> Result<InstructorResponse<Args, T>, Error>
@@ -53,7 +47,7 @@ where
     
     fn parse_json(
         model: &IterableOrSingle<Self>,
-        completion: &ChatCompletionResponse,
+        completion: &CreateChatCompletionResponse,
         validation_context: &Args,
     ) -> Result<InstructorResponse<Args, T>, Error>
     where
@@ -61,7 +55,7 @@ where
 
     fn parse_tools(
         model: &IterableOrSingle<Self>,
-        completion: &ChatCompletionResponse,
+        completion: &CreateChatCompletionResponse,
         validation_context: &Args,
     ) -> Result<InstructorResponse<Args, T>, Error>
     where
@@ -130,7 +124,7 @@ where
         serde_json::to_string_pretty(&final_schema).unwrap()
     }
 
-    fn tool_schema() -> Function {
+    fn tool_schema() -> FunctionObject {
         let schema = schemars::schema_for!(T);
         let schema_json = serde_json::to_value(&schema).unwrap();
         let title = schema_json["title"].as_str().unwrap_or_default().to_string();
@@ -140,54 +134,40 @@ where
             None => format!("Correctly extracted `{}` with all the required parameters with correct types", title),
         };
     
-        let mut properties: HashMap<String, Box<JSONSchemaDefine>> = HashMap::new();
-        let mut required: Vec<String> = Vec::new();
+        let mut parameters = serde_json::Map::new();
     
         if let Some(props) = schema_json["properties"].as_object() {
             for (prop_name, prop_value) in props {
-                let mut prop_schema = JSONSchemaDefine {
-                    schema_type: prop_value["type"].as_str().map(|t| match t {
-                        "string" => JSONSchemaType::String,
-                        "integer" => JSONSchemaType::Number,
-                        "float" => JSONSchemaType::Number, 
-                        "number" => JSONSchemaType::Number,
-                        "boolean" => JSONSchemaType::Boolean,
-                        "array" => JSONSchemaType::Array,
-                        "object" => JSONSchemaType::Object,
-                        _ => JSONSchemaType::String,
-                    }),
-                    description: prop_value["description"].as_str().map(|d| d.to_string()),
-                    ..Default::default()
-                };
+                let mut prop_schema = prop_value.clone();
     
                 if let Some(all_of) = prop_value["allOf"].as_array() {
                     if let Some(ref_value) = all_of[0]["$ref"].as_str() {
                         if let Some(def_name) = ref_value.split('/').last() {
                             if let Some(def_value) = schema_json["definitions"][def_name].as_object() {
                                 if let Some(enum_values) = def_value["enum"].as_array() {
-                                    prop_schema.enum_values = Some(enum_values.iter().map(|v| v.as_str().unwrap().to_string()).collect());
+                                    prop_schema["enum"] = serde_json::Value::Array(enum_values.clone());
                                 }
                             }
                         }
                     }
                 }
     
-                properties.insert(prop_name.to_string(), Box::new(prop_schema));
+                parameters.insert(prop_name.to_string(), prop_schema);
             }
         }
     
-        if let Some(req) = schema_json["required"].as_array() {
-            required = req.iter().map(|r| r.as_str().unwrap().to_string()).collect();
-        }
+        let required = schema_json["required"].as_array().unwrap_or(&Vec::new()).iter()
+            .map(|r| r.as_str().unwrap().to_string())
+            .collect::<Vec<String>>();
     
-        Function {
+        FunctionObject {
             name: title,
             description: Some(description),
-            parameters: FunctionParameters {
-                schema_type: JSONSchemaType::Object,
-                properties: Some(properties),
-                required: Some(required),
-            },
+            parameters: Some(serde_json::json!({
+                "type": "object",
+                "properties": parameters,
+                "required": required
+            })),
         }
     }
 
@@ -226,7 +206,7 @@ where
 
     fn from_response(
         model: &IterableOrSingle<Self>,
-        response: &ChatCompletionResponse,
+        response: &CreateChatCompletionResponse,
         validation_context: &Self::Args,
         mode: Mode,
     ) -> Result<InstructorResponse<Self::Args, T>, Error>
@@ -249,7 +229,7 @@ where
 
     fn parse_json(
         model: &IterableOrSingle<Self>,
-        completion: &ChatCompletionResponse,
+        completion: &CreateChatCompletionResponse,
         validation_context: &Self::Args,
     ) -> Result<InstructorResponse<Self::Args, T>, Error>
     where
@@ -269,7 +249,7 @@ where
 
     fn parse_tools(
         model: &IterableOrSingle<Self>,
-        completion: &ChatCompletionResponse,
+        completion: &CreateChatCompletionResponse,
         validation_context: &Self::Args,
     ) -> Result<InstructorResponse<Self::Args, T>, Error>
     where
@@ -328,9 +308,9 @@ where
     }
 }
 
-fn check_tool_call<T>(tool_call: &ToolCall) -> Result<String, Error> 
+fn check_tool_call<T>(tool_call: &ChatCompletionMessageToolCall) -> Result<String, Error> 
 {
-    let tool_name = tool_call.function.name.as_ref().unwrap();
+    let tool_name = tool_call.function.name;
     let model_name = type_name::<T>().split("::").last().unwrap();
     if tool_name != model_name {
         return Err(Error::Generic(format!(
@@ -338,9 +318,6 @@ fn check_tool_call<T>(tool_call: &ToolCall) -> Result<String, Error>
             tool_name, model_name
         )));
     }
-    if tool_call.function.arguments.as_ref().is_none() {
-        return Err(Error::Generic(format!("tool call arguments are empty in tool {:?}", tool_call)));
-    }
-    Ok(tool_call.function.arguments.as_ref().unwrap().to_string())
+    Ok(tool_call.function.arguments)
 }
 

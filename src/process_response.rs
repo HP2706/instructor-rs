@@ -1,36 +1,38 @@
 use validator::ValidateArgs;
-use openai_api_rs::v1::chat_completion::ChatCompletionResponse;
 use crate::mode::Mode;
-use openai_api_rs::v1::chat_completion::{
-    ChatCompletionRequest, ChatCompletionMessage, 
-    MessageRole, Content
-};
 use crate::traits::{OpenAISchema, BaseSchema};
-use crate::dsl::iterable::IterableBase;
 use crate::enums::Error;
 use crate::iterable::IterableOrSingle;
 use std::collections::HashMap;
 use crate::enums::InstructorResponse;
 use openai_api_rs::v1::chat_completion::{Tool, ToolType, Function};
-use crate::streaming::ChatCompletionResponseWrapper;
-
 
 pub fn handle_response_model<A, T>(
     response_model: IterableOrSingle<T>, 
     mode: Mode, 
-    kwargs : ChatCompletionRequest
-) -> Result<(IterableOrSingle<T>, ChatCompletionRequest), Error> 
+    kwargs : &mut CreateChatCompletionRequest
+) -> Result<IterableOrSingle<T>, Error>
 where
     T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
     A: 'static + Copy,
 {
-    let mut new_kwargs = kwargs.clone();
-    
+
+
+    let message = "f"""
+    As a genius expert, your task is to understand the content and provide
+    the parsed objects in json that match the following json_schema:\n
+
+    {json.dumps(response_model.model_json_schema(), indent=2)}
+
+    Make sure to return an instance of the JSON, not the schema itself
+    "
+
     match mode {
         Mode::TOOLS => {
-            new_kwargs.tools = Some(vec![
-                Tool {
-                    r#type: ToolType::Function,
+            kwargs.tools = Some(
+                vec![
+                ChatCompletionTool {
+                    r#type: ChatCompletionToolType::Function,
                     function: T::tool_schema(),
                 }
             ]);
@@ -58,57 +60,52 @@ where
             );
             match mode {
                 Mode::JSON => {
-                    new_kwargs.response_format = Some(
-                        serde_json::to_value(
-                            HashMap::from([("type".to_string(), "json_object".to_string())])
-                        ).unwrap()
+                    kwargs.response_format = Some(
+                        ChatCompletionResponseFormat {
+                            r#type: ChatCompletionResponseFormatType::JsonObject,
+                        }
                     );
                 },
                 Mode::JSON_SCHEMA => {
-                    new_kwargs.response_format = Some(
-                        serde_json::to_value(
-                            HashMap::from(
-                                [
-                                    ("type".to_string(), "json_object".to_string()),
-                                    ("schema".to_string(), schema.to_string())
-                                ]
-                            )
-                        ).unwrap()
+                    kwargs.response_format = Some(
+                        ChatCompletionResponseFormat {
+                            r#type: ChatCompletionResponseFormatType::JsonObject,
+                        }
                     );
+                    //no schema specified....  ("schema".to_string(), schema.to_string())
                 },
                 Mode::MD_JSON => {
-                    new_kwargs.messages.push(ChatCompletionMessage {
-                        role: MessageRole::user,
-                        content: Content::Text(
-                            "Return the correct JSON response within a ```json codeblock. not the JSON_SCHEMA".to_string()
-                        ),
-                        name : None
-                    });
+                    let user_message = ChatCompletionRequestMessage::User(
+                        ChatCompletionRequestUserMessage {
+                            content: ChatCompletionRequestUserMessageContent::Text(
+                                "Return the correct JSON response within a ```json codeblock. not the JSON_SCHEMA".to_string()
+                            ),
+                            role: Role::User,
+                            name: None,
+                        }
+                    );
                 },
                 _ => {}
             }
-
-            match new_kwargs.messages.get_mut(0) {
-                Some(message) if message.role == MessageRole::system => {
-                    if let Content::Text(ref mut text) = message.content {
-                        let message_content = format!("\n\n{:?}", text);
-                        *text += &message_content; //watch out for bad formatting
-                    }
-                },
-                _ => {
-                    new_kwargs.messages.insert(0, ChatCompletionMessage {
-                        role: MessageRole::system,
-                        content: Content::Text(
-                            message
-                        ),
-                        name: None, // Assuming name is optional and not required here
-                    });
-                },
-            } 
+            
+            match &kwargs.messages[0] {
+                ChatCompletionRequestMessage::System(_) => {
+                    //TODO
+                }
+                _=> {
+                    kwargs.messages.insert(0, 
+                    ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
+                            role: Role::System,
+                            content: message,
+                            name: None, // Assuming name is optional and not required here
+                        }
+                    ));
+                }
+            }
         }  
     }
 
-    return Ok((response_model, new_kwargs));
+    return Ok(response_model);
         
     
 }

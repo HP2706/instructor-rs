@@ -1,12 +1,11 @@
 use crate::mode::Mode;
-use crate::enums::Error;
+use crate::error::Error;
 use crate::process_response::process_response;
 use crate::traits::BaseSchema;
 use validator::ValidateArgs;
 use openai_api_rs::v1::chat_completion::{
     ChatCompletionRequest, ChatCompletionResponse, ChatCompletionMessage, MessageRole, Content
 };
-use crate::streaming::ChatCompletionResponseWrapper;
 use std::fmt;
 use openai_api_rs::v1::error::APIError;
 use crate::enums::InstructorResponse;

@@ -1,15 +1,7 @@
-use syn::ItemFn;
-use crate::enums::Error;
-use openai_api_rs::v1::chat_completion::{
-    ToolCall, ToolCallFunction, 
-    MessageRole, ChatCompletionChoice, ChatCompletionResponse, ChatCompletionMessageForResponse
-};
-use openai_api_rs::v1::common::Usage;
-use crate::streaming::StreamingError;
+use crate::error::Error;
 
-
-pub fn is_async(func: &ItemFn) -> bool {
-    func.sig.asyncness.is_some()
+pub fn to_sync<T>(future: impl std::future::Future<Output = T>) -> T {
+    tokio::runtime::Runtime::new().unwrap().block_on(future)
 }
 
 pub fn extract_json_from_codeblock(content: &str) -> Result<String, Error> {
@@ -23,8 +15,8 @@ pub fn extract_json_from_codeblock(content: &str) -> Result<String, Error> {
 }
 
 pub fn extract_json_from_stream(
-    chunks: Box<dyn Iterator<Item = Result<String, StreamingError>>>,
-) -> Box<dyn Iterator<Item = Result<String, StreamingError>>> {
+    chunks: Box<dyn Iterator<Item = Result<String, Error>>>,
+) -> Box<dyn Iterator<Item = Result<String, Error>>> {
     let mut capturing = false;
     let mut brace_count = 0;
     let mut json_accumulator = String::new();
@@ -59,53 +51,6 @@ pub fn extract_json_from_stream(
             Err(_) => Some(result.map(|_| json_accumulator.clone())), // Pass through errors
         }
     }))
-}
-
-///these are for better testing
-
-pub fn create_tool_call(name : String, arguments : String) -> ToolCall {
-    ToolCall { 
-        r#type : "function".to_string(),
-        id: "call_UhIRWDIKUO3kARySeidFH7lb".to_string(),
-        function: ToolCallFunction { 
-            name: Some(name), 
-            arguments: Some(arguments)
-        } 
-    }
-}
-
-pub fn create_chat_completion_choice(tool_calls: Option<Vec<ToolCall>>, content : Option<String>) -> ChatCompletionChoice {
-    ChatCompletionChoice { 
-        index: 0, 
-        message: ChatCompletionMessageForResponse { 
-            role: MessageRole::assistant, 
-            content: content, 
-            name: None, 
-            tool_calls: tool_calls
-        },
-        finish_details : None,
-        finish_reason : None
-    }
-}
-
-
-
-pub fn create_chat_completion_response(tool_calls: Option<Vec<ToolCall>>, content : Option<String>) -> ChatCompletionResponse {
-    let choices = vec![create_chat_completion_choice(tool_calls, content)];
-    return ChatCompletionResponse {
-        id: "123".to_string(),
-        object: "chat.completion".to_string(),
-        created: 1234567890,
-        model: "gpt-4".to_string(),
-        choices: choices,
-        usage: Usage {
-            prompt_tokens: 100,
-            completion_tokens: 100,
-            total_tokens: 200,
-        },
-        system_fingerprint: None,
-        headers: None,
-    };
 }
 
 

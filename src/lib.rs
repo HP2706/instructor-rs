@@ -1,6 +1,5 @@
 pub mod types;
 pub mod patch;
-pub mod exceptions;
 pub mod test;
 pub mod retry;
 pub mod process_response;
@@ -10,6 +9,6 @@ pub mod enums;
 pub mod mode;
 pub mod common;
 pub mod iterable;
-pub mod streaming;
 pub mod dsl;
+pub mod error;
 
