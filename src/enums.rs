@@ -1,31 +1,45 @@
 use crate::traits::BaseSchema;
 use validator::ValidateArgs;
-use std::fmt;
-use serde_json::Error as SerdeError;
-use std::marker::{Send, Sync};
-use crate::streaming::StreamingError;
+use crate::error::Error;
+use async_openai::types::{CreateChatCompletionResponse, ChatCompletionResponseStream};
 
-#[derive(Debug)]
-pub enum Error {
-    ValidationErrors(validator::ValidationErrors),
-    ValidationError(validator::ValidationError),
-    SerdeError(SerdeError),
-    NotImplementedError(String),
-    APIError(String),
-    Generic(String),
-    JsonExtractionError(String),
+pub enum ChatCompletionResponseWrapper {
+    Single(CreateChatCompletionResponse),
+    Stream(ChatCompletionResponseStream),
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::ValidationErrors(ref err) => write!(f, "Validation error: {}", err),
-            Error::ValidationError(ref err) => write!(f, "Validation error: {}", err),
-            Error::SerdeError(ref err) => write!(f, "Serde error: {}", err),
-            Error::NotImplementedError(ref err) => write!(f, "Not implemented: {}", err),
-            Error::APIError(ref err) => write!(f, "API error: {}", err),
-            Error::Generic(ref err) => write!(f, "Error: {}", err),
-            Error::JsonExtractionError(ref err) => write!(f, "Error: {}", err),
+impl ChatCompletionResponseWrapper {
+    pub fn get_message(&self) -> Option<String> {
+        match self {
+            ChatCompletionResponseWrapper::Single(resp) => {
+                let message = resp.choices.get(0).unwrap().message.content.clone().unwrap();
+                Some(message)
+            },
+            ChatCompletionResponseWrapper::Stream(iter) => {
+                /* let mut buffer = String::new();
+                for result in iter {
+                    match result {
+                        Ok(ChatCompletionStreamingResponse::Chunk(chunk)) => {
+                            match &chunk.choices[0].delta {
+                                Delta::Content { content } => {
+                                    buffer.push_str(&content);
+                                }
+                                Delta::Empty {} => {}
+                            }
+                        }
+                        _ => {}
+                    }
+                };
+                buffer */
+                None
+            }
+        }
+    }
+
+    pub fn get_single(self) -> Result<CreateChatCompletionResponse, Error> {
+        match self {
+            ChatCompletionResponseWrapper::Single(resp) => Ok(resp),
+            ChatCompletionResponseWrapper::Stream(iter) => Err(Error::Generic("Got a stream".to_string())),
         }
     }
 }
@@ -38,24 +52,6 @@ pub enum InstructorResponse<A, T>
 {
     One(T),
     Many(Vec<T>),
-    Stream(Box<dyn Iterator<Item = Result<T, StreamingError>>>),
-}
-
-pub enum MaybeStream<T> {
-    Stream(Box<dyn Iterator<Item = Result<T, StreamingError>>>),
-    One(T),
-    Many(Vec<T>),
-}
-
-impl<T> MaybeStream<T> {
-    ///gets the first item from the stream, or the first item in the vector, or the first item in the stream
-    pub fn unwrap(self) -> Result<T, StreamingError> {
-        match self {
-            MaybeStream::One(item) => Ok(item),
-            MaybeStream::Many(items) => Ok(items.into_iter().next().unwrap()),
-            MaybeStream::Stream(iter) => iter.into_iter().next().unwrap(),
-        }
-    }
     //Stream(Box<dyn Iterator<Item = Result<T, StreamingError>>>),
 }
 

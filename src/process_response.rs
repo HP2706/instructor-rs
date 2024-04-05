@@ -18,14 +18,26 @@ where
 {
 
 
-    let message = "f"""
-    As a genius expert, your task is to understand the content and provide
-    the parsed objects in json that match the following json_schema:\n
+    let schema = match response_model {
+        IterableOrSingle::Iterable(_) => {
+            if kwargs.stream == Some(true) {
+                return Err(
+                    Error::NotImplementedError("Response model is required for streaming.".to_string())
+                );
+            }
+            
+            format!("Make sure for each schema to return an instance of the JSON, not the schema itself, use commas to seperate the schema/schemas: {:?}", T::openai_schema())
+        },
+        IterableOrSingle::Single(_) => T::openai_schema(),
+    };
 
-    {json.dumps(response_model.model_json_schema(), indent=2)}
-
-    Make sure to return an instance of the JSON, not the schema itself
-    "
+    let message = format!(
+        "As a genius expert, your task is to understand the content and provide \
+        the parsed objects in json that match the following json_schema:\n\n\
+        {}\n\n\
+        Make sure to return an instance of the JSON, not the schema itself",
+        schema
+    );
 
     match mode {
         Mode::TOOLS => {
@@ -110,18 +122,8 @@ where
     
 }
 
-/* pub fn process_streaming_response<T, A>(
-    response: ChatCompletionResponseWrapper,
-    response_model : &IterableOrSingle<T>,
-    validation_context: &A,
-    mode: Mode,
-) -> (Result<InstructorResponse<A, T>, Error>, ChatCompletionResponseWrapper) {
-    return (Ok(T::from_streaming_response(response_model, response, validation_context, mode)), response);
-}
- */
-
 pub fn process_response<T, A>(
-    response: ChatCompletionResponseWrapper,
+    response: &ChatCompletionResponse,
     response_model : &IterableOrSingle<T>,
     stream: bool,
     validation_context: &A,
@@ -131,7 +133,7 @@ where
     T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
     A: 'static + Copy,
 {   
-
+    
 
     /* 
     //TODO
@@ -151,15 +153,8 @@ where
         return model
     */
 
-    match response {
-        ChatCompletionResponseWrapper::Single(resp) => {
-            T::from_response(response_model, &resp, validation_context, mode)
-        }
-        ChatCompletionResponseWrapper::Stream(iter) => {
-            let resp = T::from_streaming_response(response_model, iter, validation_context, mode);
-            Ok(resp)
-        }
-    }
+    return T::from_response(response_model, response, validation_context, mode);
+    
 }
 
 /* fn extract_response_model<T>(
