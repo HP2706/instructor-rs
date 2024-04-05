@@ -6,23 +6,24 @@ use validator::ValidateArgs;
 use openai_api_rs::v1::chat_completion::{
     ChatCompletionRequest, ChatCompletionResponse, ChatCompletionMessage, MessageRole, Content
 };
+use crate::streaming::ChatCompletionResponseWrapper;
 use std::fmt;
 use openai_api_rs::v1::error::APIError;
 use crate::enums::InstructorResponse;
 use crate::iterable::IterableOrSingle;
 
 pub fn reask_messages(
-    response: &ChatCompletionResponse,
+    model_message: String,
     mode: Mode,
     exception: impl fmt::Display,
 ) -> Vec<ChatCompletionMessage> {
-    let first_message = &response.choices[0].message;
     
-    
-    
+
+    //we extract the message from the stream or simply via message.choices[0].message.content
+    //let message_content = response.get_message();
     let message = ChatCompletionMessage {
-        role: first_message.role.clone(),
-        content: Content::Text(first_message.content.clone().unwrap_or("None".to_string())),
+        role: MessageRole::assistant,
+        content: Content::Text(model_message),
         name: None,
     };
     let mut messages: Vec<ChatCompletionMessage> = vec![message];
@@ -54,7 +55,7 @@ pub fn reask_messages(
 }
 
 pub fn retry_sync<'f, T, A>(
-    func: Box<dyn Fn(ChatCompletionRequest) -> Result<ChatCompletionResponse, APIError> + 'f>,
+    func: Box<dyn Fn(ChatCompletionRequest) -> Result<ChatCompletionResponseWrapper, APIError> + 'f>,
     response_model: IterableOrSingle<T>,
     validation_context: A,
     kwargs: &mut ChatCompletionRequest,
@@ -74,10 +75,9 @@ where
         let response = func(kwargs.clone());
         match response {
             Ok(_response) => {
-
-                println!("model responded with: {:?}", _response.choices[0].message.content.clone());
+                let model_message = _response.get_message();
                 let result = process_response(
-                    &_response,
+                    _response,
                     &response_model,
                     stream,
                     &validation_context,
@@ -88,13 +88,24 @@ where
                     Ok(result) => return Ok(result),
                     Err(e) => {
                         println!("Error: {}", e);
-                        let messages = reask_messages(&_response, mode, e);
-                        println!("number of messages before: {}", kwargs.messages.len());
-                        kwargs.messages.extend(messages);
-                        println!("number of messages after: {}", kwargs.messages.len());
-                        attempt += 1;
-                        continue;
-                    }
+                        //TODO think about how would 
+                        //can use response here and whether you can use it as is or not
+                        match model_message {
+                            Some(message) => {
+                                let messages = reask_messages(message, mode, e);
+                                println!("number of messages before: {}", kwargs.messages.len());
+                                kwargs.messages.extend(messages);
+                                println!("number of messages after: {}", kwargs.messages.len());
+                                attempt += 1;
+                                continue;
+                            }
+                            None => {
+                                return Err(Error::Generic(format!("Error: {}", e).to_string()));
+                            }
+                        }
+                    } //TODO BETTER ERROR HANDLING ANOTHER LOOP SHOULD ONLY GET RUN IF ERROR IS 
+                    //JSONDECODEERROR(SERDE ERROR) OR
+                    //VALIDATIONERROR
                 }
             }
             Err(e) => {

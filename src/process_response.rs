@@ -6,11 +6,14 @@ use openai_api_rs::v1::chat_completion::{
     MessageRole, Content
 };
 use crate::traits::{OpenAISchema, BaseSchema};
+use crate::dsl::iterable::IterableBase;
 use crate::enums::Error;
 use crate::iterable::IterableOrSingle;
 use std::collections::HashMap;
 use crate::enums::InstructorResponse;
 use openai_api_rs::v1::chat_completion::{Tool, ToolType, Function};
+use crate::streaming::ChatCompletionResponseWrapper;
+
 
 pub fn handle_response_model<A, T>(
     response_model: IterableOrSingle<T>, 
@@ -110,8 +113,18 @@ where
     
 }
 
+/* pub fn process_streaming_response<T, A>(
+    response: ChatCompletionResponseWrapper,
+    response_model : &IterableOrSingle<T>,
+    validation_context: &A,
+    mode: Mode,
+) -> (Result<InstructorResponse<A, T>, Error>, ChatCompletionResponseWrapper) {
+    return (Ok(T::from_streaming_response(response_model, response, validation_context, mode)), response);
+}
+ */
+
 pub fn process_response<T, A>(
-    response: &ChatCompletionResponse,
+    response: ChatCompletionResponseWrapper,
     response_model : &IterableOrSingle<T>,
     stream: bool,
     validation_context: &A,
@@ -121,7 +134,7 @@ where
     T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
     A: 'static + Copy,
 {   
-    
+
 
     /* 
     //TODO
@@ -141,8 +154,15 @@ where
         return model
     */
 
-    return T::from_response(response_model, response, validation_context, mode);
-    
+    match response {
+        ChatCompletionResponseWrapper::Single(resp) => {
+            T::from_response(response_model, &resp, validation_context, mode)
+        }
+        ChatCompletionResponseWrapper::Stream(iter) => {
+            let resp = T::from_streaming_response(response_model, iter, validation_context, mode);
+            Ok(resp)
+        }
+    }
 }
 
 /* fn extract_response_model<T>(
