@@ -1,4 +1,8 @@
 use crate::error::Error;
+use std::pin::Pin;
+use futures::stream::{Stream, StreamExt, iter};
+use futures::Future;
+
 use async_openai::types::{
     ChatCompletionResponseMessage, ChatChoice, Role, ChatCompletionMessageToolCall,ChatCompletionToolType, 
     ChatCompletionTool, CreateChatCompletionResponse, FunctionCall
@@ -17,46 +21,40 @@ pub fn extract_json_from_codeblock(content: &str) -> Result<String, Error> {
     }
 }
 
-pub fn extract_json_from_stream(
-    chunks: Box<dyn Iterator<Item = Result<String, Error>>>,
-) -> Box<dyn Iterator<Item = Result<String, Error>>> {
-    let mut capturing = false;
-    let mut brace_count = 0;
-    let mut json_accumulator = String::new();
 
-    Box::new(chunks.flat_map(move |chunk_result| {
-        match chunk_result {
-            Ok(chunk) => chunk.chars().map(Ok).collect::<Vec<_>>(),
-            Err(e) => vec![Err(e)],
-        }
-    }).filter_map(move |result| {
-        match result {
-            Ok(char) => {
+use async_stream::stream;
+use crate::types::JsonStream;
+
+pub async fn extract_json_from_stream_async(
+    mut chunks: JsonStream,
+) -> JsonStream {
+    stream! {
+        let mut capturing = false;
+        let mut brace_count = 0;
+        let mut current_json = String::new();
+
+        while let Some(chunk) = chunks.next().await {
+            //TODO could this error be handled better
+            for char in chunk.expect("Error extracting json").chars() {
                 if char == '{' {
-                    if !capturing {
-                        json_accumulator.clear(); // Start a new capture
-                    }
                     capturing = true;
                     brace_count += 1;
+                    current_json.push(char);
                 } else if char == '}' && capturing {
                     brace_count -= 1;
-                }
-
-                if capturing {
-                    json_accumulator.push(char);
+                    current_json.push(char);
                     if brace_count == 0 {
                         capturing = false;
-                        return Some(Ok(json_accumulator.clone())); // Return the captured JSON string
+                        yield Ok(current_json.clone());
+                        current_json.clear();
                     }
+                } else if capturing {
+                    current_json.push(char);
                 }
-                None
-            },
-            Err(_) => Some(result.map(|_| json_accumulator.clone())), // Pass through errors
+            }
         }
-    }))
+    }.boxed()
 }
-
-
 
 pub fn create_tool_call(name: String, arguments: String) -> ChatCompletionMessageToolCall {
     ChatCompletionMessageToolCall {

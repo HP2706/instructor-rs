@@ -1,7 +1,7 @@
 use crate::mode::Mode;
 use crate::error::Error;
 use crate::process_response::process_response_async;
-use crate::traits::BaseSchema;
+use crate::traits::{BaseSchema, BaseArg};
 use validator::ValidateArgs;
 use std::fmt;
 use async_openai::types::{
@@ -12,7 +12,7 @@ use std::pin::Pin;
 use std::future::Future;
 use async_openai::error::OpenAIError;
 use crate::enums::{InstructorResponse, ChatCompletionResponseWrapper};
-use crate::iterable::IterableOrSingle;
+use crate::enums::IterableOrSingle;
 
 pub fn reask_messages(
     model_message: String,
@@ -75,8 +75,8 @@ pub async fn retry_async<'f, T, A>(
     mode: Mode,
 ) -> Result<InstructorResponse<A, T>, Error>
 where
-    T: ValidateArgs<'static, Args = A> + BaseSchema<T>,
-    A: 'static + Copy,
+    T: ValidateArgs<'static, Args = A> + BaseSchema,
+    A: BaseArg,
 {
     let mut attempt = 0;
 

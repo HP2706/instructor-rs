@@ -2,7 +2,7 @@ use instructor_rs::traits::OpenAISchema;
 use schemars::JsonSchema;
 use validator::ValidationError;
 use std::clone::Clone;
-use instructor_rs::iterable::IterableOrSingle;
+use instructor_rs::enums::IterableOrSingle;
 use instructor_rs::utils::{
     extract_json_from_codeblock, 
     create_chat_completion_response, create_tool_call

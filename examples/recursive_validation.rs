@@ -2,7 +2,7 @@
 use std::{env, vec};
 use instructor_rs::mode::Mode;  
 use instructor_rs::patch::Patch;
-use instructor_rs::iterable::IterableOrSingle;
+use instructor_rs::enums::IterableOrSingle;
 use model_traits_macro::derive_all;
 use serde::{Deserialize, Serialize};
 use validator::Validate;

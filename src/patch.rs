@@ -1,13 +1,13 @@
 
 use crate::process_response::handle_response_model;
-use crate::iterable::IterableOrSingle;
+use crate::enums::IterableOrSingle;
 use crate::retry::retry_async;
 use async_openai::types::{CreateChatCompletionRequestArgs, CreateChatCompletionRequest};
 use std::marker::{Send, Sync};
 use async_openai::Client;
 use async_openai::error::OpenAIError;
 use async_openai::config::Config;
-use crate::traits::BaseSchema;
+use crate::traits::{BaseSchema, BaseArg};
 use validator::ValidateArgs;
 use crate::mode::Mode;
 use crate::error::Error;
@@ -36,8 +36,8 @@ where
         kwargs: CreateChatCompletionRequest
     ) -> Result<InstructorResponse<A, T>, Error>
     where
-        T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
-        A: 'static + Copy,
+        T: ValidateArgs<'static, Args=A> + BaseSchema,
+        A: BaseArg,
     {
 
         let mut kwargs = kwargs.clone();

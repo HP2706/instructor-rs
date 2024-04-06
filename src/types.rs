@@ -1,6 +1,11 @@
 use validator::ValidationErrors;
 use std::fmt;
-use std::error::Error;
+use std::error::Error as StdError;
+use futures::stream::Stream;
+use std::pin::Pin;
+use crate::error::Error;
+pub type JsonStream = Pin<Box<dyn Stream<Item = Result<String, Error>> + Send>>;
+
 
 #[derive(Debug)]
 pub enum JsonError {
@@ -26,6 +31,6 @@ impl From<ValidationErrors> for JsonError {
 
 #[derive(Debug)]
 pub struct RetryError {
-    pub last_attempt: Box<dyn Error>, // Simplified for example purposes
+    pub last_attempt: Box<dyn StdError>, // Simplified for example purposes
 }
 

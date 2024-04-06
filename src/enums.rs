@@ -1,7 +1,12 @@
 use crate::traits::BaseSchema;
-use validator::ValidateArgs;
+use validator::{ValidateArgs, ValidationErrors};
 use crate::error::Error;
 use async_openai::types::{CreateChatCompletionResponse, ChatCompletionResponseStream};
+use std::pin::Pin;
+use futures::stream::Stream;
+use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
+
 
 pub enum ChatCompletionResponseWrapper {
     Single(CreateChatCompletionResponse),
@@ -45,20 +50,33 @@ impl ChatCompletionResponseWrapper {
 }
 
 //TODO implement more traits for the enum, for multiprocessing and ...
-#[derive(Debug)]
 pub enum InstructorResponse<A, T>
-    where T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
+    where T: ValidateArgs<'static, Args=A> + BaseSchema,
     A: 'static + Copy,
 {
     One(T),
     Many(Vec<T>),
-    //Stream(Box<dyn Iterator<Item = Result<T, StreamingError>>>),
+    Stream(Pin<Box<dyn Stream<Item = Result<T, Error>> + Send>>)
 }
 
 pub enum MaybeStream<T> {
-    //Stream(Box<dyn Iterator<Item = Result<T, StreamingError>>>),
+    Stream(Pin<Box<dyn Stream<Item = Result<T, Error>> + Send>>),
     One(T),
     Many(Vec<T>),
+}
+
+impl<A, T> InstructorResponse<A, T>
+where
+    T: ValidateArgs<'static, Args = A> + BaseSchema,
+    A: 'static + Copy,
+{
+    pub fn unwrap(self) -> Result<T, Error> {
+        match self {
+            InstructorResponse::One(item) => Ok(item),
+            InstructorResponse::Many(mut items) => Ok(items.pop().expect("InstructorResponse::Many should not be empty")),
+            InstructorResponse::Stream(iter) => Err(Error::Generic("Cannot unwrap a stream".to_string())),
+        }
+    }
 }
 
 /* impl<T> MaybeStream<T> {
@@ -71,19 +89,47 @@ pub enum MaybeStream<T> {
         }
     }
 }
+*/
 
-impl<A, T> InstructorResponse<A, T>
-where
-    T: ValidateArgs<'static, Args = A> + BaseSchema<T>,
-    A: 'static + Copy,
+
+#[derive(Debug, Serialize, Copy, Clone, JsonSchema)]
+pub enum IterableOrSingle<T>
+where T: ValidateArgs<'static>
 {
+    Iterable(T), 
+    Single(T),
+}
+
+impl<T> IterableOrSingle<T>
+where 
+    T: ValidateArgs<'static> 
+{
+    // This method is now correctly placed outside the ValidateArgs trait impl block
     pub fn unwrap(self) -> T {
         match self {
-            InstructorResponse::One(item) => item,
-            InstructorResponse::Many(mut items) => items.pop().expect("InstructorResponse::Many should not be empty"),
+            IterableOrSingle::Iterable(item) | IterableOrSingle::Single(item) => item,
         }
     }
-} */
+}
 
+impl<'v_a, T> ValidateArgs<'static> for IterableOrSingle<T>
+where
+    T: ValidateArgs<'static>,
+{
+    type Args = T::Args;
 
+    fn validate_args(&self, args: Self::Args) -> Result<(), ValidationErrors> {
+        match self {
+            IterableOrSingle::Iterable(item) | IterableOrSingle::Single(item) => {
+                item.validate_args(args)
+            },
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub enum Iterable<T> {
+    VecWrapper(Vec<T>),
+    // You can add more variants here if you need to wrap T in different iterable types
+}
 

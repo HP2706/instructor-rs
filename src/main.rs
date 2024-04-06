@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use std::{env, vec};
 use instructor_rs::mode::Mode;  
 use instructor_rs::patch::Patch;
-use instructor_rs::iterable::IterableOrSingle;
+use instructor_rs::enums::IterableOrSingle;
 use model_traits_macro::derive_all;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -14,10 +14,17 @@ use async_openai::types::{
 };
 use async_openai::Client;
 use validator::ValidationError;
-
+use async_stream::stream;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+
+    let s = stream! {
+        for i in 0..3 {
+            yield i;
+        }
+    };
+
 
     let client = Client::new();
     let patched_client = Patch { client, mode: Some(Mode::JSON) };

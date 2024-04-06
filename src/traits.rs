@@ -5,30 +5,34 @@ use std::fmt::Debug;
 use std::any::type_name;
 use crate::error::Error;
 use crate::enums::InstructorResponse;
-use crate::iterable::IterableOrSingle;
+use crate::enums::IterableOrSingle;
 use crate::mode::Mode;
 use crate::utils::extract_json_from_codeblock;
 use async_openai::types::CreateChatCompletionResponse;
 use async_openai::types::{ChatCompletionMessageToolCall, FunctionObject };
-use std::future::Future;
 
-pub trait BaseSchema<T>: 
+pub trait BaseSchema: 
     'static + Debug + Serialize + for<'de> Deserialize<'de> + 
-    ValidateArgs<'static> + JsonSchema + Sized + Send{}
+    ValidateArgs<'static> + JsonSchema + Sized + Send + Sync {}
 
-impl<T> BaseSchema<T> for T
+impl<T> BaseSchema for T
 where T: 
     'static + Debug + Serialize + for<'de> Deserialize<'de> + 
-    ValidateArgs<'static> + JsonSchema + Sized + Send {}
+    ValidateArgs<'static> + JsonSchema + Sized + Send + Sync {}
 
+pub trait BaseArg: 
+    'static + Copy + Send + Sync {}
+
+impl<A> BaseArg for A
+where A: 'static + Copy + Send + Sync {}
 
 
 pub trait OpenAISchema<Args, T> 
 where
-    T: ValidateArgs<'static, Args=Args> + BaseSchema<T>,
-    Args: 'static + Copy,
+    T: ValidateArgs<'static, Args=Args> + BaseSchema,
+    Args: BaseArg,
 {
-    type Args : 'static + Copy;
+    type Args : BaseArg;
     fn openai_schema() -> String; 
 
     fn tool_schema() -> FunctionObject;
@@ -39,7 +43,7 @@ where
         validation_context: &Args
     ) -> Result<InstructorResponse<Args, T>, Error>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<T>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema;
     
     fn from_response(
         model: &IterableOrSingle<Self>,
@@ -48,7 +52,7 @@ where
         mode: Mode,
     ) -> Result<InstructorResponse<Args, T>, Error>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<T>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema;
     
     fn parse_json(
         model: &IterableOrSingle<Self>,
@@ -56,7 +60,7 @@ where
         validation_context: &Args,
     ) -> Result<InstructorResponse<Args, T>, Error>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<T>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema;
 
     fn parse_tools(
         model: &IterableOrSingle<Self>,
@@ -64,14 +68,14 @@ where
         validation_context: &Args,
     ) -> Result<InstructorResponse<Args, T>, Error>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<T>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema;
 
 }
 
 impl<A, T> OpenAISchema<A, T> for T
 where
-    T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
-    A: 'static + Copy,
+    T: ValidateArgs<'static, Args=A> + BaseSchema,
+    A: BaseArg,
 {
     type Args = A;
 
@@ -182,7 +186,7 @@ where
         validation_context: &Self::Args
     ) -> Result<InstructorResponse<Self::Args, T>, Error>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<T>,
+        Self: Sized + ValidateArgs<'static> + BaseSchema,
     {
 
         match model {
@@ -216,7 +220,7 @@ where
         mode: Mode,
     ) -> Result<InstructorResponse<Self::Args, T>, Error>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<T>,
+        Self: Sized + ValidateArgs<'static> + BaseSchema,
     {
         match mode {
             Mode::JSON | Mode::JSON_SCHEMA | Mode::MD_JSON => {
@@ -238,7 +242,7 @@ where
         validation_context: &Self::Args,
     ) -> Result<InstructorResponse<Self::Args, T>, Error>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<T>,
+        Self: Sized + ValidateArgs<'static> + BaseSchema,
     {
         let text = completion.choices[0].message.content.clone().unwrap();
         let json_extract = extract_json_from_codeblock(&text);
@@ -258,7 +262,7 @@ where
         validation_context: &Self::Args,
     ) -> Result<InstructorResponse<Self::Args, T>, Error>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<T>,
+        Self: Sized + ValidateArgs<'static> + BaseSchema,
     {
         let message = &completion.choices[0].message;
         match model {
@@ -304,7 +308,7 @@ where
 
 fn validate_single<A, T>(data: T, validation_context: A) -> Result<T, Error> 
 where
-    T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
+    T: ValidateArgs<'static, Args=A> + BaseSchema,
     A: 'static + Copy,
 {
     match data.validate_args(validation_context) {  

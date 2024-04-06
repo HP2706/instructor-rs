@@ -1,8 +1,8 @@
 use validator::ValidateArgs;
 use crate::mode::Mode;
-use crate::traits::{OpenAISchema, BaseSchema};
+use crate::traits::{OpenAISchema, BaseSchema, BaseArg};
 use crate::error::Error;
-use crate::iterable::IterableOrSingle;
+use crate::enums::IterableOrSingle;
 use std::collections::HashMap;
 use crate::enums::InstructorResponse;
 use async_openai::types::{
@@ -16,8 +16,8 @@ pub fn handle_response_model<A, T>(
     kwargs : &mut CreateChatCompletionRequest
 ) -> Result<IterableOrSingle<T>, Error>
 where
-    T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
-    A: 'static + Copy,
+    T: ValidateArgs<'static, Args=A> + BaseSchema,
+    A: BaseArg,
 {
 
 
@@ -133,8 +133,8 @@ pub async fn process_response_async<T, A>(
     mode: Mode,
 ) -> Result<InstructorResponse<A, T>, Error>
 where
-    T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
-    A: 'static + Copy,
+    T: ValidateArgs<'static, Args=A> + BaseSchema,
+    A: BaseArg,
 {   
     
 
