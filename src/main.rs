@@ -13,55 +13,69 @@ use async_openai::types::{
     ChatCompletionRequestUserMessageContent
 };
 use async_openai::Client;
-
-#[derive_all]
-struct Actor {
-    ///We annotate the fields with the description of the field like you would do Field(..., description = "...") in pydantic
-    #[schemars(description = "A string value representing the name of the person")]
-    name : String,
-    #[schemars(description = "The age of the actor")]
-    age : i64,
-    #[schemars(description = "3 movies the actor has been associated with")]
-    
-    ///we use the validate macros to validate specific fields 
-    ///here we check that the movies vector has exactly 3 items
-    #[validate(length(min = 3, max = 3, message = "movies must contain exactly 3 items"))]
-    movies : Vec<String>,
-}  
+use validator::ValidationError;
 
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+
     let client = Client::new();
     let patched_client = Patch { client, mode: Some(Mode::JSON) };
 
+    #[derive(JsonSchema, Serialize, Debug, Default, Deserialize, Clone)] 
+    ///we cannot use #[derive_all] here as enums cannot derive Validate Trait
+    enum TestEnum {
+        #[default]
+        PM,
+        AM,
+    }
+
+    #[derive_all]
+    ///we use rust macros to derive certain traits in order to serialize/deserialize format as json and Validate
+    ///#[derive(
+    ///  JsonSchema, Serialize, Debug, Default, 
+    ///  Validate, Deserialize, Clone 
+    ///)]
+    #[schemars(description = "this is a description of the weather api")]
+    struct Weather {
+        //#[schemars(description = "am or pm")]
+        //time_of_day: TestEnum,
+        #[schemars(description = "this is the hour from 1-12")]
+        time: i64,
+        city: String,
+    }
+    
     let req = CreateChatCompletionRequestArgs::default()
-        .model(GPT4_TURBO_PREVIEW.to_string())
-        .messages(vec![
-            ChatCompletionRequestMessage::User(
-                ChatCompletionRequestUserMessage{
-                    role: Role::User,
-                    content:    ChatCompletionRequestUserMessageContent::Text(String::from("
-                    return an instance of an actor 
-                    ")),
-                    name: None,
-                }
-            )],
-        ).build().unwrap();
-  
+    .model(GPT4_TURBO_PREVIEW.to_string())
+    .messages(vec![
+        ChatCompletionRequestMessage::User(
+            ChatCompletionRequestUserMessage{
+                role: Role::User,
+                content:    ChatCompletionRequestUserMessageContent::Text(String::from("
+                what is the weather at 10 in the evening in new york? 
+                and what is the whether in the biggest city in Denmark in the evening?
+                answer both
+                ")),
+                name: None,
+            }
+        )],
+    ).build().unwrap();
+
+
     let result = patched_client.chat_completion(
-        IterableOrSingle::Single(Actor::default()),
+        ///we wrap in an Iterable enum to allow more than one function call 
+        /// a bit like List[Type[BaseModel]] or Iterable[Type[BaseModel]] in instructor
+        IterableOrSingle::Iterable(Weather::default()),
         (),
-        2,
+        1,
         false, //consider removing this from the api, it appears streaming is not supported
         req,
     );
-    println!("{:?}", result.await);
-    ///Ok(InstructorResponse::Single(
-    /// Actor { name: "Leonardo DiCaprio", 
-    /// age: 49, 
-    /// movies: vec![String::from("Django unchained"), String::from("Once upon a time in holywood"), String::from("Titanic")] })
-    /// )
+
+    println!("result: {:?}", result.await);
+    ///Ok(Many([Weather { time: 10, city: "New York" }, Weather { time: 10, city: "Copenhagen" }]))
+    
     Ok(())
 }
+
 

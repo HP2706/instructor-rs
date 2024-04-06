@@ -6,7 +6,7 @@ use validator::ValidateArgs;
 use std::fmt;
 use async_openai::types::{
     ChatCompletionRequestMessage, ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageContent, 
-    ChatCompletionRequestAssistantMessage, Role 
+    ChatCompletionRequestAssistantMessage, Role, CreateChatCompletionRequest
 };
 use std::pin::Pin;
 use std::future::Future;
