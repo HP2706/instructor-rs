@@ -1,5 +1,8 @@
 use crate::error::Error;
-
+use async_openai::types::{
+    ChatCompletionResponseMessage, ChatChoice, Role, ChatCompletionMessageToolCall,ChatCompletionToolType, 
+    ChatCompletionTool, CreateChatCompletionResponse, FunctionCall
+};
 pub fn to_sync<T>(future: impl std::future::Future<Output = T>) -> T {
     tokio::runtime::Runtime::new().unwrap().block_on(future)
 }
@@ -54,3 +57,47 @@ pub fn extract_json_from_stream(
 }
 
 
+
+pub fn create_tool_call(name: String, arguments: String) -> ChatCompletionMessageToolCall {
+    ChatCompletionMessageToolCall {
+        r#type: ChatCompletionToolType::Function,
+        function: FunctionCall {
+            name: name,
+            arguments : arguments
+        },
+        id: "id".to_string()
+    }
+}
+
+pub fn create_chat_completion_choice(
+    tool_calls: Option<Vec<ChatCompletionMessageToolCall>>,
+    content: Option<String>,
+) -> ChatChoice {
+    ChatChoice {
+        index: 0,
+        message: ChatCompletionResponseMessage {
+            role: Role::Assistant,
+            content: content,
+            tool_calls: tool_calls,
+            function_call: None
+        },
+        finish_reason: None,
+        logprobs : None
+    }
+}
+
+pub fn create_chat_completion_response(
+    tool_calls: Option<Vec<ChatCompletionMessageToolCall>>,
+    content: Option<String>,
+) -> CreateChatCompletionResponse {
+    let choices = vec![create_chat_completion_choice(tool_calls, content)];
+    CreateChatCompletionResponse {
+        id: "chat.completion.chunk".to_string(),
+        object: "chat.completion".to_string(),
+        created: 0 as u32,
+        model: "gpt-4-turbo-preview".to_string(),
+        choices: choices,
+        usage: None,
+        system_fingerprint: None
+    }
+}

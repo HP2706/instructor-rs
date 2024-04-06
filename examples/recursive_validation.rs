@@ -1,4 +1,4 @@
-use schemars::JsonSchema;
+/* use schemars::JsonSchema;
 use std::{env, vec};
 use instructor_rs::mode::Mode;  
 use instructor_rs::patch::Patch;
@@ -13,7 +13,8 @@ use async_openai::types::{
     ChatCompletionRequestUserMessageContent
 };
 use async_openai::Client;
-
+use validator::ValidationError;
+use instructor_rs::enums::InstructorResponse;
 
 #[derive_all]
 ///we use rust macros to derive certain traits in order to serialize/deserialize format as json and Validate
@@ -27,31 +28,42 @@ struct Movies {
     soft_movies : Vec<String>,
 }
 
-#[derive(
-    JsonSchema, serde::Serialize, Debug, Default, 
-    validator::Validate, serde::Deserialize, Clone 
-)]
+#[derive_all]
 struct IsSoft {
     #[schemars(description = "A boolean value that indicates whether all movies are soft and or romantic")]
     content : bool
 }
 
+#[derive_all]
+#[schemars(description = "this is a description of the weather api")]
+    struct Weather {
+        //#[schemars(description = "am or pm")]
+        //time_of_day: TestEnum,
+        #[schemars(description = "this is the hour from 1-12")]
+        time: i64,
+        city: String,
+    }
+    
+
 ///we define our validation function for the soft_movies field
 /// This function calls an llm and checks if all movies are soft and or romantic
-fn check_are_soft(value: &Vec<String>) -> Result<(), ValidationError> {
-    let client = Client::new(env::var("OPENAI_API_KEY").unwrap().to_string());
+async fn check_are_soft(value: &Vec<String>) -> Result<(), ValidationError> {
+    let client = Client::new();
     let patched_client = Patch { client, mode: Some(Mode::JSON) };
 
-    let req = ChatCompletionRequest::new(
-        GPT4_TURBO_PREVIEW.to_string(),
-        vec![chat_completion::ChatCompletionMessage {
-            role: chat_completion::MessageRole::user,
-            content: chat_completion::Content::Text(String::from("
-            return true if all movies are soft and or romantic, false otherwise in the specified json format
-            ")),
-            name: None,
-        }],
-    );
+    let req = CreateChatCompletionRequestArgs::default()
+    .model(GPT4_TURBO_PREVIEW.to_string())
+    .messages(vec![
+        ChatCompletionRequestMessage::User(
+            ChatCompletionRequestUserMessage{
+                role: Role::User,
+                content:    ChatCompletionRequestUserMessageContent::Text(String::from("
+                return true if all movies are soft and or romantic, false otherwise in the specified json format
+                ")),
+                name: None,
+            }
+        )],
+    ).build().unwrap();
   
     let result = patched_client.chat_completion(
         IterableOrSingle::Single(IsSoft::default()),
@@ -59,12 +71,11 @@ fn check_are_soft(value: &Vec<String>) -> Result<(), ValidationError> {
         2,
         false, //consider removing this from the api, it appears streaming is not supported
         req,
-    );
+    ).await;
     
-    ///we match the result of the llm call
     match result {
         Ok(res) => {
-            match res.unwrap().content {
+            match res.get_single().content {
                 true => return Ok(()),
                 false => return Err(ValidationError::new("movies are not soft and or romantic")),
             }
@@ -73,27 +84,31 @@ fn check_are_soft(value: &Vec<String>) -> Result<(), ValidationError> {
             ///if the llm fails, the movies are undecisive and we reject them
             return Err(ValidationError::new("movies are undecisive"))
         }
-        
-    
     }
 }
 
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = Client::new(env::var("OPENAI_API_KEY").unwrap().to_string());
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = Client::new();
     let patched_client = Patch { client, mode: Some(Mode::JSON) };
 
-    let req = ChatCompletionRequest::new(
-        GPT4_TURBO_PREVIEW.to_string(),
-        vec![chat_completion::ChatCompletionMessage {
-            role: chat_completion::MessageRole::user,
-            content: chat_completion::Content::Text(String::from("
-            return 5 movies that are soft and or romantic
-            ")),
-            name: None,
-        }],
-    );
-  
+    let req = CreateChatCompletionRequestArgs::default()
+    .model(GPT4_TURBO_PREVIEW.to_string())
+    .messages(vec![
+        ChatCompletionRequestMessage::User(
+            ChatCompletionRequestUserMessage{
+                role: Role::User,
+                content:    ChatCompletionRequestUserMessageContent::Text(String::from("
+                return 5 movies that are soft and or romantic
+                ")),
+                name: None,
+            }
+        )],
+    ).build().unwrap();
+
+   
     let result = patched_client.chat_completion(
         IterableOrSingle::Single(Movies::default()),
         (), //no validation context needed
@@ -101,7 +116,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         false, //consider removing this from the api, it appears streaming is not supported
         req,
     );
-    println!("{:?}", result);
+    println!("{:?}", result.await);
     Ok(())
 }
 
+*/
+
+
+fn main(){}

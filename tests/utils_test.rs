@@ -1,4 +1,4 @@
-use instructor_rs::utils::{extract_json_from_codeblock, extract_json_from_stream};
+use instructor_rs::utils::{extract_json_from_codeblock, extract_json_from_stream, to_sync};
 use instructor_rs::error::Error;
 
 #[cfg(test)]
@@ -77,25 +77,25 @@ mod tests {
         }
 
 
-        let chunks = text.split(' ');
-        let json_stream = extract_json_from_stream(chunks);
-        let collected: String = json_stream.collect();
-        println!("collected: {:?}", collected);
-        let json: Json = serde_json::from_str(&collected).unwrap();
+        let chunks = text.split(' ').map(|s| Ok(s.to_string()));
+        let chunk_stream = Box::new(chunks);
+        let json_stream = extract_json_from_stream(chunk_stream);
+        let collected: Result<String, _> = json_stream.collect();
+        let json: Json = serde_json::from_str(&collected.unwrap()).unwrap();
         assert_eq!(json.key, "value");
     }
     
     #[test]
     fn test_multiple_extract_json_from_stream() {
         let input = r#"{'key1': 'value'}, {'key2': 'value'}"#;
-        let chunks = input.split(','); // Directly split without trimming
-        let json_stream = extract_json_from_stream(chunks); // Assuming extract_json_from_stream can accept an Iterator<Item=&str>
-        let collected: String = json_stream.collect();
+        let chunks = input.split(',').map(|s| Ok(s.to_string())); // Convert to Iterator<Item = Result<String, Error>>
+        let json_stream = extract_json_from_stream(Box::new(chunks)); // Box the iterator
+        let collected: Result<String, _> = json_stream.collect();
         
         // Check that both JSON objects are present in the output
         let expected_1 = "{'key1': 'value'}";
         let expected_2 = "{'key2': 'value'}";
-        assert!(collected.contains(expected_1), "Output does not contain the first expected JSON object.");
-        assert!(collected.contains(expected_2), "Output does not contain the second expected JSON object.");
+        assert!(collected.as_ref().unwrap().contains(expected_1), "Output does not contain the first expected JSON object.");
+        assert!(collected.as_ref().unwrap().contains(expected_2), "Output does not contain the second expected JSON object.");
     }
 }
