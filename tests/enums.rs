@@ -1,7 +1,8 @@
 use schemars::JsonSchema;
 use std::clone::Clone;
 use std::marker::{Send, Sync};
-use instructor_rs::enums::{Error as InstructorError, InstructorResponse};
+use instructor_rs::enums::InstructorResponse;
+use instructor_rs::error::Error as InstructorError;
 
 
 fn test_func<T>() -> bool 

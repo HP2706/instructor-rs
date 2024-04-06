@@ -1,5 +1,5 @@
 use instructor_rs::utils::{extract_json_from_codeblock, extract_json_from_stream};
-use instructor_rs::enums::Error;
+use instructor_rs::error::Error;
 
 #[cfg(test)]
 mod tests {

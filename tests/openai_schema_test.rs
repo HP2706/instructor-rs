@@ -4,10 +4,12 @@ use validator::ValidationError;
 use std::clone::Clone;
 use instructor_rs::iterable::IterableOrSingle;
 use instructor_rs::utils::{
-    extract_json_from_codeblock, create_chat_completion_choice, 
+    extract_json_from_codeblock, 
     create_chat_completion_response, create_tool_call
 };
-use instructor_rs::enums::Error;
+use instructor_rs::error::Error;
+use async_openai::types::CreateChatCompletionResponse;
+
 use validator::Validate;
 use serde::{Deserialize, Serialize};
 use model_traits_macro::derive_all;
@@ -21,8 +23,6 @@ struct TestStruct {
 
 #[cfg(test)]
 mod tests {
-    use openai_api_rs::v1::{chat_completion::ChatCompletionResponse, common::Usage, completion};
-
     use super::*;
 
     #[test]

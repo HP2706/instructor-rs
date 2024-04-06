@@ -21,8 +21,6 @@ async-openai = "0.20.0"
 futures = "0.3.30"
 thiserror = "1.0.58"
 rand = "0.8.5"
-openai-api-rs = "4.0.8"
-derive_builder_macro = "0.20.0"
 derive_builder = "0.20.0"
 
 

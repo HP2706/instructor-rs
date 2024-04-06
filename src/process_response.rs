@@ -8,6 +8,7 @@ use crate::enums::InstructorResponse;
 use async_openai::types::{
     ChatCompletionRequestMessage, ChatCompletionRequestSystemMessage, ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageContent, ChatCompletionResponseFormat, ChatCompletionResponseFormatType, ChatCompletionTool, ChatCompletionToolType, CreateChatCompletionRequest, CreateChatCompletionResponse, Role 
 };
+use crate::enums::ChatCompletionResponseWrapper;
 
 pub fn handle_response_model<A, T>(
     response_model: IterableOrSingle<T>, 
@@ -124,8 +125,8 @@ where
     
 }
 
-pub fn process_response<T, A>(
-    response: &CreateChatCompletionResponse,
+pub async fn process_response_async<T, A>(
+    response: &ChatCompletionResponseWrapper,
     response_model : &IterableOrSingle<T>,
     stream: bool,
     validation_context: &A,
@@ -154,8 +155,15 @@ where
         )
         return model
     */
-
-    return T::from_response(response_model, response, validation_context, mode);
+    match response {
+        ChatCompletionResponseWrapper::Stream(res) => {
+            panic!("Not implemented yet");
+            //return T::from_streaming_response(response_model, res, validation_context, mode);
+        }
+        ChatCompletionResponseWrapper::Single(res) => {
+            return T::from_response(response_model, res, validation_context, mode);
+        }
+    }
     
 }
 

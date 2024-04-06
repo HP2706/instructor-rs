@@ -10,11 +10,16 @@ use crate::mode::Mode;
 use crate::utils::extract_json_from_codeblock;
 use async_openai::types::CreateChatCompletionResponse;
 use async_openai::types::{ChatCompletionMessageToolCall, FunctionObject };
+use std::future::Future;
 
-pub trait BaseSchema<T>: 'static + Debug + Serialize + for<'de> Deserialize<'de> + ValidateArgs<'static> + JsonSchema + Sized {}
+pub trait BaseSchema<T>: 
+    'static + Debug + Serialize + for<'de> Deserialize<'de> + 
+    ValidateArgs<'static> + JsonSchema + Sized + Send{}
 
 impl<T> BaseSchema<T> for T
-where T: 'static + Debug + Serialize + for<'de> Deserialize<'de> + ValidateArgs<'static> + JsonSchema + Sized {}
+where T: 
+    'static + Debug + Serialize + for<'de> Deserialize<'de> + 
+    ValidateArgs<'static> + JsonSchema + Sized + Send {}
 
 
 
@@ -310,7 +315,7 @@ where
 
 fn check_tool_call<T>(tool_call: &ChatCompletionMessageToolCall) -> Result<String, Error> 
 {
-    let tool_name = tool_call.function.name;
+    let tool_name = &tool_call.function.name;
     let model_name = type_name::<T>().split("::").last().unwrap();
     if tool_name != model_name {
         return Err(Error::Generic(format!(
@@ -318,6 +323,6 @@ fn check_tool_call<T>(tool_call: &ChatCompletionMessageToolCall) -> Result<Strin
             tool_name, model_name
         )));
     }
-    Ok(tool_call.function.arguments)
+    Ok(tool_call.function.arguments.clone())
 }
 

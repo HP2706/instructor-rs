@@ -1,15 +1,19 @@
-use openai_api_rs::v1::common::GPT4_TURBO_PREVIEW;
 use schemars::JsonSchema;
-use openai_api_rs::v1::api::Client;
-use openai_api_rs::v1::chat_completion::{self, ChatCompletionRequest};
-use validator::ValidationError;
 use std::{env, vec};
 use instructor_rs::mode::Mode;  
 use instructor_rs::patch::Patch;
 use instructor_rs::iterable::IterableOrSingle;
+use model_traits_macro::derive_all;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-use model_traits_macro::derive_all;
+use instructor_rs::common::GPT4_TURBO_PREVIEW;
+use async_openai::types::{
+    CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
+    ChatCompletionRequestUserMessage, ChatCompletionRequestMessage, Role,
+    ChatCompletionRequestUserMessageContent
+};
+use async_openai::Client;
+
 
 #[derive_all]
 ///we use rust macros to derive certain traits in order to serialize/deserialize format as json and Validate

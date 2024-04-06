@@ -1,13 +1,16 @@
 use crate::mode::Mode;
 use crate::error::Error;
-use crate::process_response::process_response;
+use crate::process_response::process_response_async;
 use crate::traits::BaseSchema;
 use validator::ValidateArgs;
-use openai_api_rs::v1::chat_completion::{
-    ChatCompletionRequest, ChatCompletionResponse, ChatCompletionMessage, MessageRole, Content
-};
 use std::fmt;
-use openai_api_rs::v1::error::APIError;
+use async_openai::types::{
+    ChatCompletionRequestMessage, ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageContent, 
+    ChatCompletionRequestAssistantMessage, Role 
+};
+use std::pin::Pin;
+use std::future::Future;
+use async_openai::error::OpenAIError;
 use crate::enums::{InstructorResponse, ChatCompletionResponseWrapper};
 use crate::iterable::IterableOrSingle;
 
@@ -15,51 +18,60 @@ pub fn reask_messages(
     model_message: String,
     mode: Mode,
     exception: impl fmt::Display,
-) -> Vec<ChatCompletionMessage> {
+) -> Vec<ChatCompletionRequestMessage> {
     
 
     //we extract the message from the stream or simply via message.choices[0].message.content
     //let message_content = response.get_message();
-    let message = ChatCompletionMessage {
-        role: MessageRole::assistant,
-        content: Content::Text(model_message),
-        name: None,
-    };
-    let mut messages: Vec<ChatCompletionMessage> = vec![message];
+    let message = ChatCompletionRequestMessage::Assistant(
+        ChatCompletionRequestAssistantMessage{
+            role: Role::Assistant,
+            content: Some(model_message),
+            name: None,
+            tool_calls : None,
+            function_call: None,
+        }
+    );
+       
+    let mut messages: Vec<ChatCompletionRequestMessage> = vec![message];
 
     match mode {
         Mode::MD_JSON => {
-            messages.push(ChatCompletionMessage {
-                role: MessageRole::user,
-                content: Content::Text(format!(
-                    "Correct your JSON ONLY RESPONSE, based on the following errors:\n{}\n",
-                    exception
-                )),
-                name: None,
-            });
+            messages.push(ChatCompletionRequestMessage::User(
+                ChatCompletionRequestUserMessage{
+                    role: Role::User,
+                    content: ChatCompletionRequestUserMessageContent::Text(format!(
+                        "Correct your JSON ONLY RESPONSE, based on the following errors:\n{}\n",
+                        exception
+                    )),
+                    name: None,
+                }   
+            ));
         }
         _ => {
-            messages.push(ChatCompletionMessage {
-                role: MessageRole::user,
-                content: Content::Text(format!(
+            messages.push(ChatCompletionRequestMessage::User(
+                ChatCompletionRequestUserMessage{
+                role: Role::User,
+                content: ChatCompletionRequestUserMessageContent::Text(format!(
                     "Recall the function correctly, fix the errors, exceptions found\n{}",
                     exception
                 )),
-                name: None,
-            });
+                    name: None,
+                }    
+            ));
         }
     }
 
     messages
 }
 
-pub fn retry_sync<'f, T, A>(
-    func: Box<dyn Fn(ChatCompletionRequest) -> Result<ChatCompletionResponseWrapper, APIError> + 'f>,
+pub async fn retry_async<'f, T, A>(
+    func: Box<dyn Fn(CreateChatCompletionRequest) -> Pin<Box<dyn Future<Output = Result<ChatCompletionResponseWrapper, OpenAIError>> + Send>> + Send + 'static>,
     response_model: IterableOrSingle<T>,
     validation_context: A,
-    kwargs: &mut ChatCompletionRequest,
+    kwargs: &mut CreateChatCompletionRequest,
     max_retries: usize,
-    stream : bool,
+    stream: bool,
     mode: Mode,
 ) -> Result<InstructorResponse<A, T>, Error>
 where
@@ -72,16 +84,16 @@ where
         println!("message to model\n\n {:?}", kwargs.messages);
         println!("attempt: {}", attempt);
         let response = func(kwargs.clone());
-        match response {
+        match response.await {
             Ok(_response) => {
                 let model_message = _response.get_message();
-                let result = process_response(
-                    _response,
+                let result = process_response_async(
+                    &_response,
                     &response_model,
                     stream,
                     &validation_context,
                     mode,
-                );
+                ).await;
 
                 match result {
                     Ok(result) => return Ok(result),
