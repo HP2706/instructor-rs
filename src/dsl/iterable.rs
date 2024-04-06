@@ -1,52 +1,50 @@
-/* use validator::ValidateArgs;
+use validator::ValidateArgs;
 use crate::error::Error;
-use crate::iterable::IterableOrSingle;
+use crate::enums::IterableOrSingle;
 use crate::mode::Mode;
+use crate::traits::BaseArg;
 use crate::traits::BaseSchema;
 use crate::traits::OpenAISchema;
-use crate::utils::extract_json_from_stream;
+use crate::utils::extract_json_from_stream_async;
 use crate::enums::{InstructorResponse, ChatCompletionResponseWrapper};
-use async_openai::types::{ChatCompletionResponseStream, ChatCompletionStreamResponseDelta};
+use async_openai::types::{ChatCompletionResponseStream, CreateChatCompletionStreamResponse, ChatCompletionStreamResponseDelta};
 use async_openai::error::OpenAIError;
+use std::pin::Pin;
+use crate::types::JsonStream;
+use futures::stream::{Stream, StreamExt, iter};
+use async_stream::stream;
+use futures::pin_mut;
 
 pub trait IterableBase<Args, T> 
 where
-    T: ValidateArgs<'static, Args=Args> + BaseSchema<T>,
-    Args: 'static + Copy,
+    T: ValidateArgs<'static, Args=Args> + BaseSchema,
+    Args: BaseArg,
 {
-    type Args : 'static + Copy;
+    type Args : BaseArg;
 
-    fn extract_json(
+    async fn extract_json_async(
         completion : ChatCompletionResponseStream,
         mode : Mode
-    ) -> Box< dyn Iterator<Item = Result<String, Error>>>
+    ) ->  Pin<Box<dyn Stream<Item = Result<String, Error>> + Send>>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<T>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema;
 
-    fn from_streaming_response(
+    async fn from_streaming_response_async(
         model: &IterableOrSingle<Self>,
         response: ChatCompletionResponseStream,
         validation_context: &Args,
         mode: Mode,
     ) -> InstructorResponse<Args, T>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<T>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema;
     
-    fn tasks_from_chunks(
+    async fn tasks_from_chunks_async(
         model: &IterableOrSingle<Self>,
-        json_chunks: Box<dyn Iterator<Item = Result<String, StreamingError>>>,
+        json_chunks: JsonStream,
         validation_context: &Args
     ) -> InstructorResponse<Args, T>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<T>;
-    
-    fn tasks_from_chunks(
-        model: &IterableOrSingle<Self>,
-        json_chunks: Box<dyn Iterator<Item = Result<String, Error>>>,
-        validation_context: &Args
-    ) -> InstructorResponse<Args, T>
-    where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<T>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema;
 
     fn get_object(s: &str, index: usize) -> (Option<String>, String);
 }
@@ -54,35 +52,32 @@ where
 
 impl<A, T> IterableBase<A, T> for T
 where
-    T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
-    A: 'static + Copy,
+    T: ValidateArgs<'static, Args=A> + BaseSchema,
+    A: BaseArg,
 {
     type Args = A;
 
-    fn extract_json(
-        completion : ChatCompletionResponseStream,
-        mode : Mode
-    ) -> Box< dyn Iterator<Item = Result<String, Error>>>
+    async fn extract_json_async(
+        completion: ChatCompletionResponseStream,
+        mode: Mode
+    ) -> Pin<Box<dyn Stream<Item = Result<String, Error>> + Send>>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<T>
+        Self: Sized + ValidateArgs<'static> + BaseSchema
     {
-        Box::new(completion.filter_map(move |chunk_result| {
-            match chunk_result {
-                Ok(chunk) => match chunk {
-                    ChatCompletionResponseStream::CreateChatCompletionStreamResponse(chunk) => {
+        let stream = completion.filter_map(move |chunk_result| {
+            async move {
+                match chunk_result {
+                    Ok(chunk) => {
+                        // Assuming each chunk or its relevant parts can be cloned as needed
                         match mode {
                             Mode::JSON | Mode::MD_JSON | Mode::JSON_SCHEMA => {
                                 chunk.choices.get(0).and_then(|choice| {
-                                    match &choice.delta.content {
-                                        Some(content) => {
-                                            Some(Ok(content.clone()))
-                                        },
-                                        None => None,
-                                    }
+                                    // Here, we clone the content of the choice, if necessary
+                                    choice.delta.content.clone().map(|content| Ok(Ok(content)))
                                 })
                             },
                             Mode::TOOLS => {
-                                //TODO: Implement this (check openai api)
+                                // Handling for Mode::TOOLS
                                 Some(Err(Error::Generic(
                                     format!("Mode {:?} is not supported for MultiTask streaming", mode)
                                 )))
@@ -92,14 +87,14 @@ where
                             ))),
                         }
                     },
-                    ChatCompletionResponseStream::OpenAIError(e) => None, //todo think about this
-                },
-                Err(e) => Some(Err(e)),
+                    Err(_) => None, // Consider how to handle stream errors appropriately
+                }
             }
-        }))
+        }).flat_map(|option| futures::stream::iter(option.into_iter()));
+        Box::pin(stream)
     }
 
-    fn from_streaming_response(
+    async fn from_streaming_response_async(
         model: &IterableOrSingle<Self>,
         response: ChatCompletionResponseStream,
         validation_context: &Self::Args,
@@ -107,80 +102,55 @@ where
     ) -> InstructorResponse<Self::Args, T>
     { 
 
-        let mut json_chunks  = Self::extract_json(response, mode);
+        let mut json_chunks  = Self::extract_json_async(response, mode);
 
-        if mode == Mode::MD_JSON {
-            json_chunks = extract_json_from_stream(json_chunks);
-        }
+        //if mode == Mode::MD_JSON {
+        //    let mut json_chunks: JsonStream = Self::extract_json_async(response, mode).await;
+        //}
 
-        Self::tasks_from_chunks(model, json_chunks, validation_context)
+        Self::tasks_from_chunks_async(model, json_chunks.await, validation_context).await
     }
 
-    fn tasks_from_chunks(
+    async fn tasks_from_chunks_async(
         model: &IterableOrSingle<Self>,
-        json_chunks: Box<dyn Iterator<Item = Result<String, Error>>>,
-        validation_context: &Self::Args
+        json_chunks: JsonStream,
+        validation_context: &Self::Args,
     ) -> InstructorResponse<Self::Args, T>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<T>
+        Self: Sized + ValidateArgs<'static> + BaseSchema,
     {
         let mut started = false;
         let mut potential_object = String::new();
-        let stream = json_chunks.flat_map(move |chunk_result| {
-            match chunk_result {
-                Ok(chunk) => {
-                    potential_object.push_str(&chunk);
-                    if !started {
-                        if let Some(index) = chunk.find('[') {
-                            started = true;
-                            potential_object = chunk[index + 1..].to_string();
+        let stream = stream! {
+            pin_mut!(json_chunks); // Ensure json_chunks is pinned for .next() in async context
+            while let Some(chunk_result) = json_chunks.next().await {
+                match chunk_result {
+                    Ok(chunk) => {
+                        potential_object.push_str(&chunk);
+                        if !started {
+                            if let Some(index) = chunk.find('[') {
+                                started = true;
+                                potential_object = chunk[index + 1..].to_string();
+                                continue; // Continue to the next iteration of the loop
+                            }
                         }
-                        ChatCompletionStreamingResponse::Done => {
-                            println!("{:?}", "done");
+                        let (task_json, new_potential_object) = Self::get_object(&potential_object, 0);
+                        potential_object = new_potential_object;
+                        if let Some(task_json) = task_json {
+                            // Ensure model_validate_json and its entire call chain are `Send`
+                            match Self::model_validate_json(model, &task_json, validation_context) {
+                                Ok(single) => {
+                                    yield Ok(single.unwrap().unwrap());
+                                },
+                                Err(e) => yield Err(e),
+                            }
                         }
-                        return None;
-                    }
-                },
-                Err(e) => return Some(Err(e)),
-            }
-
-            let (task_json, new_potential_object) = Self::get_object(&potential_object, 0);
-            potential_object = new_potential_object;
-
-            if let Some(task_json) = task_json {
-                match Self::model_validate_json(model, &task_json, validation_context) {
-                    Ok(single) => {
-                        let model = single.unwrap().unwrap().unwrap();
-                        Some(Ok(model))
                     },
-                    Err(e) => Some(Err(Error::ModelValidationError(e.to_string()))),
+                    Err(e) => yield Err(e),
                 }
-            } else {
-                None
             }
-        });
-    
-        InstructorResponse::Stream(Box::new(stream))
-    }
-
-    fn get_object(s: &str, mut stack: usize) -> (Option<String>, String) {
-        let start_index = s.find('{');
-        if let Some(start) = start_index {
-            for (i, c) in s.char_indices() {
-                if c == '{' {
-                    stack += 1;
-                } else if c == '}' {
-                    stack -= 1;
-                    if stack == 0 {
-                        // Adjusted slicing to handle Rust's string slice indexing
-                        return (Some(s[start..=i].to_string()), s[i+1..].to_string());
-                    }
-                }
-                Err(e) => eprintln!("Error: {:?}", e),
-            }
-        });
-    
-        InstructorResponse::Stream(Box::new(stream))
+        }.boxed(); // If you're using tokio, you might need to use .boxed().send() here
+        InstructorResponse::Stream(Box::new(stream) as Pin<Box<dyn Stream<Item = Result<T, Error>> + Send>>)
     }
 
     fn get_object(s: &str, mut stack: usize) -> (Option<String>, String) {
@@ -201,4 +171,3 @@ where
         (None, s.to_string())
     }
 }
- */
