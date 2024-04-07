@@ -57,6 +57,7 @@ where
 {
     type Args = A;
 
+    ///recieves a stream of CreateChatCompletionStreamResponse and returns a stream of strings
     async fn extract_json_async(
         completion: ChatCompletionResponseStream,
         mode: Mode
@@ -104,10 +105,10 @@ where
         Self: Sized + ValidateArgs<'static> + BaseSchema
     { 
 
-        let mut json_chunks  = Self::extract_json_async(response, mode);
+        let json_chunks  = Self::extract_json_async(response, mode);
 
         //if mode == Mode::MD_JSON {
-        //    let mut json_chunks: JsonStream = Self::extract_json_async(response, mode).await;
+        //    let mut json_chunks: JsonStream = extract_json_from_stream_async(response).await;
         //}
 
         Self::tasks_from_chunks_async(model, json_chunks.await, validation_context.clone()).await
@@ -142,13 +143,20 @@ where
                             // Ensure model_validate_json and its entire call chain are `Send`
                             match Self::model_validate_json(&model, &task_json, &validation_context) {
                                 Ok(single) => {
+                                    println!("yielding: {:?}", single);
                                     yield Ok(single.unwrap().unwrap());
                                 },
-                                Err(e) => yield Err(e),
+                                Err(e) => {
+                                    println!("error line 151: {:?}", e);
+                                    yield Err(e);
+                                },
                             }
                         }
                     },
-                    Err(e) => yield Err(e),
+                    Err(e) => {
+                        println!("error line 157: {:?}", e);
+                        yield Err(e);
+                    },
                 }
             }
         }.boxed(); // If you're using tokio, you might need to use .boxed().send() here

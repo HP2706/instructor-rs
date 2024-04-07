@@ -1,4 +1,4 @@
-use instructor_rs::traits::OpenAISchema;
+use instructor_rs::openai_schema::OpenAISchema;
 use schemars::JsonSchema;
 use validator::ValidationError;
 use std::clone::Clone;

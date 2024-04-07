@@ -6,7 +6,8 @@ use std::pin::Pin;
 use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
-use std::marker::PhantomData;
+use std::fmt::{Formatter, Debug};
+
 
 pub enum ChatCompletionResponseWrapper {
     Single(CreateChatCompletionResponse),
@@ -77,18 +78,18 @@ where
     }
 }
 
-/* impl<T> MaybeStream<T> {
-    ///gets the first item from the stream, or the first item in the vector, or the first item in the stream
-    pub fn unwrap(self) -> Result<T, StreamingError> {
+
+impl<T> Debug for InstructorResponse<T> 
+where T: ValidateArgs<'static> + BaseSchema
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
-            MaybeStream::One(item) => Ok(item),
-            MaybeStream::Many(items) => Ok(items.into_iter().next().unwrap()),
-            MaybeStream::Stream(iter) => iter.into_iter().next().unwrap(),
+            InstructorResponse::One(item) => write!(f, "One({:?})", item),
+            InstructorResponse::Many(items) => write!(f, "Many({:?})", items),
+            InstructorResponse::Stream(iter) => write!(f, "Stream({:?})", iter.size_hint()),
         }
     }
 }
-*/
-
 
 #[derive(Debug, Serialize, Copy, Clone, JsonSchema)]
 pub enum IterableOrSingle<T>

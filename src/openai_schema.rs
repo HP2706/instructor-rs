@@ -13,12 +13,12 @@ use async_openai::types::{ChatCompletionMessageToolCall, FunctionObject };
 
 pub trait BaseSchema: 
      Debug + Serialize + for<'de> Deserialize<'de> + 
-    ValidateArgs<'static> + JsonSchema + Sized + Send + Sync + Clone {}
+    ValidateArgs<'static> + JsonSchema + Sized + Send + Sync + Clone + 'static {}
 
 impl<T> BaseSchema for T
 where T: 
     Debug + Serialize + for<'de> Deserialize<'de> + 
-    ValidateArgs<'static> + JsonSchema + Sized + Send + Sync + Clone {}
+    ValidateArgs<'static> + JsonSchema + Sized + Send + Sync + Clone + 'static {}
 
 pub trait BaseArg: 
     Clone + Send + Sync +'static {}

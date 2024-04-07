@@ -67,7 +67,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         IterableOrSingle::Iterable(Weather::default()),
         (),
         1,
-        false, //consider removing this from the api, it appears streaming is not supported
         req,
     );
 

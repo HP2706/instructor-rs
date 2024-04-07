@@ -1,6 +1,7 @@
-use instructor_rs::utils::{extract_json_from_codeblock, extract_json_from_stream, to_sync};
+use instructor_rs::utils::{extract_json_from_codeblock, string_to_stream, extract_json_from_stream_async };
 use instructor_rs::error::Error;
-
+use futures::stream::{self, StreamExt}; // Ensure StreamExt is imported for collect()
+use instructor_rs::types::JsonStream;
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -45,9 +46,9 @@ mod tests {
         assert_eq!(result.unwrap(), "{\"key\": {\"nestedKey\": \"nestedValue\"}}");
     }
 
-    #[test]
+    #[tokio::test]
     
-    fn test_extract_json_from_stream() {
+    async fn test_extract_json_from_stream_async() {
         let text = r#"here is the json for you! 
     
         ```json
@@ -77,25 +78,25 @@ mod tests {
         }
 
 
-        let chunks = text.split(' ').map(|s| Ok(s.to_string()));
-        let chunk_stream = Box::new(chunks);
-        let json_stream = extract_json_from_stream(chunk_stream);
-        let collected: Result<String, _> = json_stream.collect();
-        let json: Json = serde_json::from_str(&collected.unwrap()).unwrap();
+        let json_stream = string_to_stream(text.to_string()).await;
+        let stream = extract_json_from_stream_async(json_stream).await;
+        let results: Vec<Result<String, _>> = stream.collect().await; // Collect into Vec<Result<String, _>>
+        let collected: String = results.into_iter().collect::<Result<Vec<_>, _>>().unwrap().join(" "); // Handle errors and concatenate
+        let json: Json = serde_json::from_str(&collected).unwrap();
         assert_eq!(json.key, "value");
     }
     
-    #[test]
-    fn test_multiple_extract_json_from_stream() {
-        let input = r#"{'key1': 'value'}, {'key2': 'value'}"#;
-        let chunks = input.split(',').map(|s| Ok(s.to_string())); // Convert to Iterator<Item = Result<String, Error>>
-        let json_stream = extract_json_from_stream(Box::new(chunks)); // Box the iterator
-        let collected: Result<String, _> = json_stream.collect();
-        
+    #[tokio::test]
+    async fn test_multiple_extract_json_from_stream_async() {
+        let text = r#"{'key1': 'value'}, {'key2': 'value'}"#;
+        let json_stream = string_to_stream(text.to_string()).await;
+        let stream = extract_json_from_stream_async(json_stream).await;
+        let results: Vec<Result<String, _>> = stream.collect().await; // Collect into Vec<Result<String, _>>
+        let collected: String = results.into_iter().collect::<Result<Vec<_>, _>>().unwrap().join(" ");// Await the collect() call
         // Check that both JSON objects are present in the output
         let expected_1 = "{'key1': 'value'}";
         let expected_2 = "{'key2': 'value'}";
-        assert!(collected.as_ref().unwrap().contains(expected_1), "Output does not contain the first expected JSON object.");
-        assert!(collected.as_ref().unwrap().contains(expected_2), "Output does not contain the second expected JSON object.");
+        assert!(collected.contains(expected_1), "Output does not contain the first expected JSON object.");
+        assert!(collected.contains(expected_2), "Output does not contain the second expected JSON object.");
     }
 }

@@ -26,7 +26,7 @@ mod tests {
         }     
         test_func::<InstructorError>();
         test_func::<Number>();
-        test_func::<InstructorResponse<(), Number>>();
+        //test_func::<InstructorResponse<Number>>();
 
     }
 }

@@ -1,11 +1,15 @@
 use crate::error::Error;
+use std::borrow::BorrowMut;
 use std::pin::Pin;
-use futures::stream::{Stream, StreamExt, iter};
+use futures::stream::{Stream ,StreamExt, iter};
 use futures::Future;
-
+use crate::types::JsonStream;
+use async_stream::stream;
 use async_openai::types::{
     ChatCompletionResponseMessage, ChatChoice, Role, ChatCompletionMessageToolCall,ChatCompletionToolType, 
-    ChatCompletionTool, CreateChatCompletionResponse, FunctionCall
+    CreateChatCompletionResponse, FunctionCall,
+    CreateChatCompletionStreamResponse, ChatCompletionResponseStream, ChatChoiceStream,
+    ChatCompletionStreamResponseDelta, 
 };
 pub fn to_sync<T>(future: impl std::future::Future<Output = T>) -> T {
     tokio::runtime::Runtime::new().unwrap().block_on(future)
@@ -20,10 +24,6 @@ pub fn extract_json_from_codeblock(content: &str) -> Result<String, Error> {
         _ => Err(Error::JsonExtractionError("No JSON found".to_string())),
     }
 }
-
-
-use async_stream::stream;
-use crate::types::JsonStream;
 
 pub async fn extract_json_from_stream_async(
     mut chunks: JsonStream,
@@ -99,3 +99,47 @@ pub fn create_chat_completion_response(
         system_fingerprint: None
     }
 }
+
+pub async fn create_chat_completion_stream(
+    chunks: JsonStream,
+) -> ChatCompletionResponseStream {
+    let mut chunks = chunks;
+    let stream = stream! {
+        while let Some(chunk) = chunks.borrow_mut().next().await {
+            let a = CreateChatCompletionStreamResponse {
+                id : "hi".to_string(),
+                object: "chat.completion".to_string(),
+                created: 0 as u32,
+                model: "gpt-4-turbo-preview".to_string(),
+                system_fingerprint : None,
+                choices: vec![ChatChoiceStream {
+                    index: 0,
+                    finish_reason: None,
+                    logprobs: None,
+                    delta: ChatCompletionStreamResponseDelta {
+                    content: Some(chunk.unwrap()),
+                    function_call: None,
+                    tool_calls: None,
+                    role: None
+                    }
+                }]
+            };
+            yield Ok(a);
+        }
+
+    }.boxed();
+
+    return stream
+
+
+
+}
+
+pub async fn string_to_stream(text: String) -> JsonStream {
+    stream! {
+        for word in text.chars() {
+            yield Ok(word.to_string());
+        }
+    }.boxed()
+}
+

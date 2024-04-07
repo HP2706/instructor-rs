@@ -140,7 +140,6 @@ where
     */
     match response {
         ChatCompletionResponseWrapper::Stream(res) => {
-            println!("\n\nStreaming response\n\n");
             let res = T::from_streaming_response_async(response_model, res, validation_context, mode).await;
             Ok(res)
         }

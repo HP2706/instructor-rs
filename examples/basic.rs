@@ -53,7 +53,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         IterableOrSingle::Single(Actor::default()),
         (),
         2,
-        false, //consider removing this from the api, it appears streaming is not supported
         req,
     );
     println!("{:?}", result.await);
