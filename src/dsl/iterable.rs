@@ -2,9 +2,9 @@ use validator::ValidateArgs;
 use crate::error::Error;
 use crate::enums::IterableOrSingle;
 use crate::mode::Mode;
-use crate::traits::BaseArg;
-use crate::traits::BaseSchema;
-use crate::traits::OpenAISchema;
+use crate::openai_schema::BaseArg;
+use crate::openai_schema::BaseSchema;
+use crate::openai_schema::OpenAISchema;
 use crate::utils::extract_json_from_stream_async;
 use crate::enums::{InstructorResponse, ChatCompletionResponseWrapper};
 use async_openai::types::{ChatCompletionResponseStream, CreateChatCompletionStreamResponse, ChatCompletionStreamResponseDelta};
@@ -17,7 +17,7 @@ use futures::pin_mut;
 
 pub trait IterableBase<Args, T> 
 where
-    T: ValidateArgs<'static, Args=Args> + BaseSchema,
+    T: ValidateArgs<'static, Args=Args> + BaseSchema<'static> + 'static ,
     Args: BaseArg,
 {
     type Args : BaseArg;
@@ -27,24 +27,24 @@ where
         mode : Mode
     ) ->  Pin<Box<dyn Stream<Item = Result<String, Error>> + Send>>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema;
+        Self: Sized + ValidateArgs<'static> + BaseSchema<'static>;
 
     async fn from_streaming_response_async(
-        model: &IterableOrSingle<Self>,
+        model: IterableOrSingle<'static, Self>,
         response: ChatCompletionResponseStream,
         validation_context: &Args,
         mode: Mode,
-    ) -> InstructorResponse<Args, T>
+    ) -> InstructorResponse<'static, T>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema;
+        Self: Sized + ValidateArgs<'static> + BaseSchema<'static>;
     
     async fn tasks_from_chunks_async(
-        model: &IterableOrSingle<Self>,
+        model: IterableOrSingle<'static, Self>,
         json_chunks: JsonStream,
-        validation_context: &Args
-    ) -> InstructorResponse<Args, T>
+        validation_context: Args
+    ) -> InstructorResponse<'static, T>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema;
+        Self: Sized + ValidateArgs<'static> + BaseSchema<'static>;
 
     fn get_object(s: &str, index: usize) -> (Option<String>, String);
 }
@@ -52,8 +52,8 @@ where
 
 impl<A, T> IterableBase<A, T> for T
 where
-    T: ValidateArgs<'static, Args=A> + BaseSchema,
-    A: BaseArg,
+    T: ValidateArgs<'static, Args=A> + BaseSchema<'static> + 'static ,
+    A: BaseArg + 'static,
 {
     type Args = A;
 
@@ -62,7 +62,7 @@ where
         mode: Mode
     ) -> Pin<Box<dyn Stream<Item = Result<String, Error>> + Send>>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema
+        Self: Sized + ValidateArgs<'static> + BaseSchema<'static>
     {
         let stream = completion.filter_map(move |chunk_result| {
             async move {
@@ -95,11 +95,13 @@ where
     }
 
     async fn from_streaming_response_async(
-        model: &IterableOrSingle<Self>,
+        model: IterableOrSingle<'static, Self>,
         response: ChatCompletionResponseStream,
         validation_context: &Self::Args,
         mode: Mode,
-    ) -> InstructorResponse<Self::Args, T>
+    ) -> InstructorResponse<'static, T>
+    where
+        Self: Sized + ValidateArgs<'static> + BaseSchema<'static>
     { 
 
         let mut json_chunks  = Self::extract_json_async(response, mode);
@@ -108,16 +110,16 @@ where
         //    let mut json_chunks: JsonStream = Self::extract_json_async(response, mode).await;
         //}
 
-        Self::tasks_from_chunks_async(model, json_chunks.await, validation_context).await
+        Self::tasks_from_chunks_async(model, json_chunks.await, validation_context.clone()).await
     }
 
     async fn tasks_from_chunks_async(
-        model: &IterableOrSingle<Self>,
+        model: IterableOrSingle<'static, Self>,
         json_chunks: JsonStream,
-        validation_context: &Self::Args,
-    ) -> InstructorResponse<Self::Args, T>
+        validation_context: Self::Args,
+    ) -> InstructorResponse<'static, T>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema,
+        Self: Sized + ValidateArgs<'static> + BaseSchema<'static>,
     {
         let mut started = false;
         let mut potential_object = String::new();
@@ -138,7 +140,7 @@ where
                         potential_object = new_potential_object;
                         if let Some(task_json) = task_json {
                             // Ensure model_validate_json and its entire call chain are `Send`
-                            match Self::model_validate_json(model, &task_json, validation_context) {
+                            match Self::model_validate_json(&model, &task_json, &validation_context) {
                                 Ok(single) => {
                                     yield Ok(single.unwrap().unwrap());
                                 },
@@ -150,7 +152,7 @@ where
                 }
             }
         }.boxed(); // If you're using tokio, you might need to use .boxed().send() here
-        InstructorResponse::Stream(Box::new(stream) as Pin<Box<dyn Stream<Item = Result<T, Error>> + Send>>)
+        InstructorResponse::Stream(stream)
     }
 
     fn get_object(s: &str, mut stack: usize) -> (Option<String>, String) {

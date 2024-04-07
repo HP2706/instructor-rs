@@ -1,6 +1,8 @@
 use validator::ValidateArgs;
 use crate::mode::Mode;
-use crate::traits::{OpenAISchema, BaseSchema, BaseArg};
+use crate::openai_schema::{BaseSchema, BaseArg};
+use crate::openai_schema::OpenAISchema;
+use crate::dsl::iterable::IterableBase;
 use crate::error::Error;
 use crate::enums::IterableOrSingle;
 use std::collections::HashMap;
@@ -8,39 +10,19 @@ use crate::enums::InstructorResponse;
 use async_openai::types::{
     ChatCompletionRequestMessage, ChatCompletionRequestSystemMessage, ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageContent, ChatCompletionResponseFormat, ChatCompletionResponseFormatType, ChatCompletionTool, ChatCompletionToolType, CreateChatCompletionRequest, CreateChatCompletionResponse, Role 
 };
+
+
 use crate::enums::ChatCompletionResponseWrapper;
 
 pub fn handle_response_model<A, T>(
-    response_model: IterableOrSingle<T>, 
+    response_model: IterableOrSingle<'static, T>, 
     mode: Mode, 
     kwargs : &mut CreateChatCompletionRequest
-) -> Result<IterableOrSingle<T>, Error>
+) -> Result<IterableOrSingle<'static, T>, Error>
 where
-    T: ValidateArgs<'static, Args=A> + BaseSchema,
+    T: ValidateArgs<'static, Args=A> + BaseSchema<'static>,
     A: BaseArg,
 {
-
-
-    let schema = match response_model {
-        IterableOrSingle::Iterable(_) => {
-            if kwargs.stream == Some(true) {
-                return Err(
-                    Error::NotImplementedError("Response model is required for streaming.".to_string())
-                );
-            }
-            
-            format!("Make sure for each schema to return an instance of the JSON, not the schema itself, use commas to seperate the schema/schemas: {:?}", T::openai_schema())
-        },
-        IterableOrSingle::Single(_) => T::openai_schema(),
-    };
-
-    let message = format!(
-        "As a genius expert, your task is to understand the content and provide \
-        the parsed objects in json that match the following json_schema:\n\n\
-        {}\n\n\
-        Make sure to return an instance of the JSON, not the schema itself",
-        schema
-    );
 
     match mode {
         Mode::TOOLS => {
@@ -54,16 +36,19 @@ where
         },
         Mode::JSON | Mode::MD_JSON | Mode::JSON_SCHEMA => {
             let schema = match response_model {
-                IterableOrSingle::Iterable(_) => {
+                IterableOrSingle::Single(_) => {
                     if kwargs.stream == Some(true) {
                         return Err(
-                            Error::NotImplementedError("Response model is required for streaming.".to_string())
+                            Error::Generic(
+                                "stream=True is not supported when using response_model parameter for non-iterables".to_string()
+                            )
                         );
                     }
                     
                     format!("Make sure for each schema to return an instance of the JSON, not the schema itself, use commas to seperate the schema/schemas: {:?}", T::openai_schema())
                 },
-                IterableOrSingle::Single(_) => T::openai_schema(),
+                IterableOrSingle::Iterable(_) => T::openai_schema(),
+                IterableOrSingle::Phantom(_) => panic!("Phantom"), // this is probably bad practice, try another way
             };
 
             let message = format!(
@@ -126,15 +111,14 @@ where
 }
 
 pub async fn process_response_async<T, A>(
-    response: &ChatCompletionResponseWrapper,
-    response_model : &IterableOrSingle<T>,
-    stream: bool,
+    response: ChatCompletionResponseWrapper,
+    response_model : IterableOrSingle<'static, T>,
     validation_context: &A,
     mode: Mode,
-) -> Result<InstructorResponse<A, T>, Error>
+) -> Result<InstructorResponse<'static, T>, Error>
 where
-    T: ValidateArgs<'static, Args=A> + BaseSchema,
-    A: BaseArg,
+    T: ValidateArgs<'static, Args=A> + BaseSchema<'static> + 'static,
+    A: BaseArg + 'static,
 {   
     
 
@@ -157,11 +141,12 @@ where
     */
     match response {
         ChatCompletionResponseWrapper::Stream(res) => {
-            panic!("Not implemented yet");
-            //return T::from_streaming_response(response_model, res, validation_context, mode);
+            println!("\n\nStreaming response\n\n");
+            let res = T::from_streaming_response_async(response_model, res, validation_context, mode).await;
+            Ok(res)
         }
         ChatCompletionResponseWrapper::Single(res) => {
-            return T::from_response(response_model, res, validation_context, mode);
+            return T::from_response(&response_model, &res, validation_context, mode);
         }
     }
     

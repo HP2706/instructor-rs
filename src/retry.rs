@@ -1,7 +1,7 @@
 use crate::mode::Mode;
 use crate::error::Error;
 use crate::process_response::process_response_async;
-use crate::traits::{BaseSchema, BaseArg};
+use crate::openai_schema::{BaseSchema, BaseArg};
 use validator::ValidateArgs;
 use std::fmt;
 use async_openai::types::{
@@ -65,17 +65,16 @@ pub fn reask_messages(
     messages
 }
 
-pub async fn retry_async<'f, T, A>(
+pub async fn retry_async<T, A>(
     func: Box<dyn Fn(CreateChatCompletionRequest) -> Pin<Box<dyn Future<Output = Result<ChatCompletionResponseWrapper, OpenAIError>> + Send>> + Send + 'static>,
-    response_model: IterableOrSingle<T>,
+    response_model: IterableOrSingle<'static, T>,
     validation_context: A,
     kwargs: &mut CreateChatCompletionRequest,
     max_retries: usize,
-    stream: bool,
     mode: Mode,
-) -> Result<InstructorResponse<A, T>, Error>
+) -> Result<InstructorResponse<'static, T>, Error>
 where
-    T: ValidateArgs<'static, Args = A> + BaseSchema,
+    T: ValidateArgs<'static, Args = A> + BaseSchema<'static>,
     A: BaseArg,
 {
     let mut attempt = 0;
@@ -88,9 +87,8 @@ where
             Ok(_response) => {
                 let model_message = _response.get_message();
                 let result = process_response_async(
-                    &_response,
-                    &response_model,
-                    stream,
+                    _response,
+                    response_model.clone(),
                     &validation_context,
                     mode,
                 ).await;

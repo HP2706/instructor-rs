@@ -7,7 +7,7 @@ use std::marker::{Send, Sync};
 use async_openai::Client;
 use async_openai::error::OpenAIError;
 use async_openai::config::Config;
-use crate::traits::{BaseSchema, BaseArg};
+use crate::openai_schema::{BaseSchema, BaseArg};
 use validator::ValidateArgs;
 use crate::mode::Mode;
 use crate::error::Error;
@@ -27,16 +27,33 @@ impl<C> Patch<C>
 where
     C: Config + Clone + Send + Sync + 'static,
 {
+    /// Initiates a chat completion request with the OpenAI API.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `response_model`: `IterableOrSingle<'static, T>` - Determines the type of response model to use. 
+    ///   Can be either a single instance or an iterable collection of instances, depending on the use case.
+    /// * `validation_context`: `A` - The context or data used for validating the request. 
+    ///   The type `A` must implement the `BaseArg` trait.
+    /// * `max_retries`: `usize` - The maximum number of retries for the request in case of failures.
+    /// * `stream`: `bool` - A flag indicating whether the response should be streamed. 
+    ///   If `true`, the response is streamed; otherwise, a single response is returned.
+    /// * `kwargs`: `CreateChatCompletionRequest` - Additional keyword arguments to customize the chat completion request.
+    /// 
+    /// # Returns
+    /// 
+    /// A `Result` type that, on success, contains an `InstructorResponse<'static, T>`, 
+    /// which wraps the response model(s) in the specified format (either single or iterable). 
+    /// On failure, it returns an `Error`.
     pub async fn chat_completion<T, A>(
         &self, 
-        response_model:IterableOrSingle<T>,
+        response_model:IterableOrSingle<'static, T>,
         validation_context: A,
         max_retries: usize,
-        stream: bool,
         kwargs: CreateChatCompletionRequest
-    ) -> Result<InstructorResponse<A, T>, Error>
+    ) -> Result<InstructorResponse<'static, T>, Error>
     where
-        T: ValidateArgs<'static, Args=A> + BaseSchema,
+        T: ValidateArgs<'static, Args=A> + BaseSchema<'static>,
         A: BaseArg,
     {
 
@@ -52,14 +69,12 @@ where
             mode, 
             &mut kwargs
         ).map_err(|e| e)?;
-
         
         let client = self.client.clone();
         let func: Box<
             dyn Fn(CreateChatCompletionRequest) -> Pin<Box<dyn Future<Output = Result<ChatCompletionResponseWrapper, OpenAIError>> + Send>>
                 + Send
-                + Sync
-                + 'static,
+                + Sync,
         > = Box::new(move |kwargs| {
             let client = client.clone();
             Box::pin(async move {
@@ -73,7 +88,6 @@ where
                     }
                     Some(true) => {
                         let result = client.chat().create_stream(kwargs).await;
-                        panic!("Not implemented yet");
                         match result {
                             Ok(res) => Ok(ChatCompletionResponseWrapper::Stream(res)),
                             Err(e) => Err(e),
@@ -82,13 +96,13 @@ where
                 }
             })
         });
+
         retry_async(
             func,
             response_model,
             validation_context,
             &mut kwargs,
             max_retries,
-            stream,
             self.mode.unwrap(),
         ).await
     }

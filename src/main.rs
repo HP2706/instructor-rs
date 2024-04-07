@@ -15,6 +15,8 @@ use async_openai::types::{
 use async_openai::Client;
 use validator::ValidationError;
 use async_stream::stream;
+use instructor_rs::enums::InstructorResponse;
+use futures::stream::{Stream, StreamExt, iter};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new();
     let patched_client = Patch { client, mode: Some(Mode::JSON) };
 
-    #[derive(JsonSchema, Serialize, Debug, Default, Deserialize, Clone)] 
+    #[derive(JsonSchema, Serialize, Debug, Default, Deserialize, Copy, Clone)] 
     ///we cannot use #[derive_all] here as enums cannot derive Validate Trait
     enum TestEnum {
         #[default]
@@ -37,19 +39,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         AM,
     }
 
-    #[derive_all]
+
     ///we use rust macros to derive certain traits in order to serialize/deserialize format as json and Validate
     ///#[derive(
     ///  JsonSchema, Serialize, Debug, Default, 
     ///  Validate, Deserialize, Clone 
     ///)]
     #[schemars(description = "this is a description of the weather api")]
+    #[derive(
+        JsonSchema, Serialize, Debug, Default, 
+        Validate, Deserialize, Clone
+    )]
+        
     struct Weather {
         //#[schemars(description = "am or pm")]
         //time_of_day: TestEnum,
         #[schemars(description = "this is the hour from 1-12")]
         time: i64,
-        city: String,
+        //city: Vec<String>,
+        times : Vec<TestEnum>,
     }
     
     let req = CreateChatCompletionRequestArgs::default()
@@ -66,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 name: None,
             }
         )],
-    ).build().unwrap();
+    ).stream(true).build().unwrap();
 
 
     let result = patched_client.chat_completion(
@@ -75,11 +83,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         IterableOrSingle::Iterable(Weather::default()),
         (),
         1,
-        false, //consider removing this from the api, it appears streaming is not supported
         req,
     );
 
-    println!("result: {:?}", result.await);
+    use std::time::Instant;
+
+
+    let mut model = result.await;
+    match model {
+        Ok(x) => {
+            match x {
+                InstructorResponse::Phantom(x) => println!("result: {:?}", x),
+                InstructorResponse::Many(x) => println!("result: {:?}", x),
+                InstructorResponse::One(x) => println!("result: {:?}", x),
+                InstructorResponse::Stream(mut x) => {
+                    println!("\n\nStreaming response\n\n");
+                    let t0 = Instant::now();
+                    while let Some(x) = x.next().await {
+                        println!("result: {:?} at time {:?}", x, t0.elapsed());
+                    }
+                },
+            }
+        }
+        Err(e) => println!("error: {:?}", e),
+    }
     ///Ok(Many([Weather { time: 10, city: "New York" }, Weather { time: 10, city: "Copenhagen" }]))
     
     Ok(())
