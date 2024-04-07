@@ -15,12 +15,12 @@ use async_openai::types::{
 use crate::enums::ChatCompletionResponseWrapper;
 
 pub fn handle_response_model<A, T>(
-    response_model: IterableOrSingle<'static, T>, 
+    response_model: IterableOrSingle<T>, 
     mode: Mode, 
     kwargs : &mut CreateChatCompletionRequest
-) -> Result<IterableOrSingle<'static, T>, Error>
+) -> Result<IterableOrSingle<T>, Error>
 where
-    T: ValidateArgs<'static, Args=A> + BaseSchema<'static>,
+    T: ValidateArgs<'static, Args=A> + BaseSchema,
     A: BaseArg,
 {
 
@@ -48,7 +48,6 @@ where
                     format!("Make sure for each schema to return an instance of the JSON, not the schema itself, use commas to seperate the schema/schemas: {:?}", T::openai_schema())
                 },
                 IterableOrSingle::Iterable(_) => T::openai_schema(),
-                IterableOrSingle::Phantom(_) => panic!("Phantom"), // this is probably bad practice, try another way
             };
 
             let message = format!(
@@ -112,12 +111,12 @@ where
 
 pub async fn process_response_async<T, A>(
     response: ChatCompletionResponseWrapper,
-    response_model : IterableOrSingle<'static, T>,
+    response_model : IterableOrSingle<T>,
     validation_context: &A,
     mode: Mode,
-) -> Result<InstructorResponse<'static, T>, Error>
+) -> Result<InstructorResponse<T>, Error>
 where
-    T: ValidateArgs<'static, Args=A> + BaseSchema<'static> + 'static,
+    T: ValidateArgs<'static, Args=A> + BaseSchema + 'static,
     A: BaseArg + 'static,
 {   
     

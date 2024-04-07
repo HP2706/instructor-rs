@@ -31,7 +31,7 @@ where
     /// 
     /// # Arguments
     /// 
-    /// * `response_model`: `IterableOrSingle<'static, T>` - Determines the type of response model to use. 
+    /// * `response_model`: `IterableOrSingle<T>` - Determines the type of response model to use. 
     ///   Can be either a single instance or an iterable collection of instances, depending on the use case.
     /// * `validation_context`: `A` - The context or data used for validating the request. 
     ///   The type `A` must implement the `BaseArg` trait.
@@ -42,18 +42,18 @@ where
     /// 
     /// # Returns
     /// 
-    /// A `Result` type that, on success, contains an `InstructorResponse<'static, T>`, 
+    /// A `Result` type that, on success, contains an `InstructorResponse<T>`, 
     /// which wraps the response model(s) in the specified format (either single or iterable). 
     /// On failure, it returns an `Error`.
     pub async fn chat_completion<T, A>(
         &self, 
-        response_model:IterableOrSingle<'static, T>,
+        response_model:IterableOrSingle<T>,
         validation_context: A,
         max_retries: usize,
         kwargs: CreateChatCompletionRequest
-    ) -> Result<InstructorResponse<'static, T>, Error>
+    ) -> Result<InstructorResponse<T>, Error>
     where
-        T: ValidateArgs<'static, Args=A> + BaseSchema<'static>,
+        T: ValidateArgs<'static, Args=A> + BaseSchema + 'static,
         A: BaseArg,
     {
 

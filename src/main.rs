@@ -93,7 +93,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match model {
         Ok(x) => {
             match x {
-                InstructorResponse::Phantom(x) => println!("result: {:?}", x),
                 InstructorResponse::Many(x) => println!("result: {:?}", x),
                 InstructorResponse::One(x) => println!("result: {:?}", x),
                 InstructorResponse::Stream(mut x) => {

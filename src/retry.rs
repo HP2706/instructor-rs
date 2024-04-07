@@ -67,14 +67,14 @@ pub fn reask_messages(
 
 pub async fn retry_async<T, A>(
     func: Box<dyn Fn(CreateChatCompletionRequest) -> Pin<Box<dyn Future<Output = Result<ChatCompletionResponseWrapper, OpenAIError>> + Send>> + Send + 'static>,
-    response_model: IterableOrSingle<'static, T>,
+    response_model: IterableOrSingle<T>,
     validation_context: A,
     kwargs: &mut CreateChatCompletionRequest,
     max_retries: usize,
     mode: Mode,
-) -> Result<InstructorResponse<'static, T>, Error>
+) -> Result<InstructorResponse<T>, Error>
 where
-    T: ValidateArgs<'static, Args = A> + BaseSchema<'static>,
+    T: ValidateArgs<'static, Args = A> + BaseSchema + 'static,
     A: BaseArg,
 {
     let mut attempt = 0;

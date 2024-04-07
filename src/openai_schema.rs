@@ -11,14 +11,14 @@ use crate::utils::extract_json_from_codeblock;
 use async_openai::types::CreateChatCompletionResponse;
 use async_openai::types::{ChatCompletionMessageToolCall, FunctionObject };
 
-pub trait BaseSchema<'v_a>: 
+pub trait BaseSchema: 
      Debug + Serialize + for<'de> Deserialize<'de> + 
-    ValidateArgs<'v_a> + JsonSchema + Sized + Send + Sync + Clone {}
+    ValidateArgs<'static> + JsonSchema + Sized + Send + Sync + Clone {}
 
-impl<'v_a, T> BaseSchema<'v_a> for T
+impl<T> BaseSchema for T
 where T: 
     Debug + Serialize + for<'de> Deserialize<'de> + 
-    ValidateArgs<'v_a> + JsonSchema + Sized + Send + Sync + Clone {}
+    ValidateArgs<'static> + JsonSchema + Sized + Send + Sync + Clone {}
 
 pub trait BaseArg: 
     Clone + Send + Sync +'static {}
@@ -27,9 +27,9 @@ impl<A> BaseArg for A
 where A: Clone + Send + Sync  + 'static{}
 
 
-pub trait OpenAISchema<'v_a, Args, T> 
+pub trait OpenAISchema<Args, T> 
 where
-    T: ValidateArgs<'v_a, Args=Args> + BaseSchema<'v_a>,
+    T: ValidateArgs<'static, Args=Args> + BaseSchema,
     Args: BaseArg,
 {
     type Args : BaseArg;
@@ -38,43 +38,43 @@ where
     fn tool_schema() -> FunctionObject;
  
     fn model_validate_json(
-        model: &IterableOrSingle<'v_a, Self>, 
+        model: &IterableOrSingle<Self>, 
         data: &str, 
         validation_context: &Args
-    ) -> Result<InstructorResponse<'v_a, T>, Error>
+    ) -> Result<InstructorResponse<T>, Error>
     where
-        Self: Sized + ValidateArgs<'v_a> + BaseSchema<'v_a>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema;
     
     fn from_response(
-        model: &IterableOrSingle<'v_a, Self>,
+        model: &IterableOrSingle<Self>,
         response: &CreateChatCompletionResponse,
         validation_context: &Args,
         mode: Mode,
-    ) -> Result<InstructorResponse<'v_a, T>, Error>
+    ) -> Result<InstructorResponse<T>, Error>
     where
-        Self: Sized + ValidateArgs<'v_a> + BaseSchema<'v_a>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema;
     
     fn parse_json(
-        model: &IterableOrSingle<'v_a, Self>,
+        model: &IterableOrSingle<Self>,
         completion: &CreateChatCompletionResponse,
         validation_context: &Args,
-    ) -> Result<InstructorResponse<'v_a, T>, Error>
+    ) -> Result<InstructorResponse<T>, Error>
     where
-        Self: Sized + ValidateArgs<'v_a> + BaseSchema<'v_a>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema;
 
     fn parse_tools(
-        model: &IterableOrSingle<'v_a, Self>,
+        model: &IterableOrSingle<Self>,
         completion: &CreateChatCompletionResponse,
         validation_context: &Args,
-    ) -> Result<InstructorResponse<'v_a, T>, Error>
+    ) -> Result<InstructorResponse<T>, Error>
     where
-        Self: Sized + ValidateArgs<'v_a> + BaseSchema<'v_a>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema;
 
 }
 
-impl<'v_a, A, T> OpenAISchema<'v_a, A, T> for T
+impl<A, T> OpenAISchema<A, T> for T
 where
-    T: ValidateArgs<'v_a, Args=A> + BaseSchema<'v_a>,
+    T: ValidateArgs<'static, Args=A> + BaseSchema,
     A: BaseArg,
 {
     type Args = A;
@@ -181,12 +181,12 @@ where
     }
 
     fn model_validate_json(
-        model: &IterableOrSingle<'v_a, Self>, 
+        model: &IterableOrSingle<Self>, 
         data: &str, 
         validation_context: &Self::Args
-    ) -> Result<InstructorResponse<'v_a, T>, Error>
+    ) -> Result<InstructorResponse<T>, Error>
     where
-        Self: Sized + ValidateArgs<'v_a> + BaseSchema<'v_a>,
+        Self: Sized + ValidateArgs<'static> + BaseSchema,
     {
 
         match model {
@@ -210,18 +210,17 @@ where
                     Err(e) => Err(Error::SerdeError(e)),
                 }
             }
-            IterableOrSingle::Phantom(_) => Err(Error::Generic("Cannot unwrap phantomData".to_string())),
         }
     }
 
     fn from_response(
-        model: &IterableOrSingle<'v_a, Self>,
+        model: &IterableOrSingle<Self>,
         response: &CreateChatCompletionResponse,
         validation_context: &Self::Args,
         mode: Mode,
-    ) -> Result<InstructorResponse<'v_a, T>, Error>
+    ) -> Result<InstructorResponse<T>, Error>
     where
-        Self: Sized + ValidateArgs<'v_a> + BaseSchema<'v_a>,
+        Self: Sized + ValidateArgs<'static> + BaseSchema,
     {
         match mode {
             Mode::JSON | Mode::JSON_SCHEMA | Mode::MD_JSON => {
@@ -238,12 +237,12 @@ where
     }
 
     fn parse_json(
-        model: &IterableOrSingle<'v_a, Self>,
+        model: &IterableOrSingle<Self>,
         completion: &CreateChatCompletionResponse,
         validation_context: &Self::Args,
-    ) -> Result<InstructorResponse<'v_a, T>, Error>
+    ) -> Result<InstructorResponse<T>, Error>
     where
-        Self: Sized + ValidateArgs<'v_a> + BaseSchema<'v_a>,
+        Self: Sized + ValidateArgs<'static> + BaseSchema,
     {
         let text = completion.choices[0].message.content.clone().unwrap();
         let json_extract = extract_json_from_codeblock(&text);
@@ -258,12 +257,12 @@ where
     }
 
     fn parse_tools(
-        model: &IterableOrSingle<'v_a, Self>,
+        model: &IterableOrSingle<Self>,
         completion: &CreateChatCompletionResponse,
         validation_context: &Self::Args,
-    ) -> Result<InstructorResponse<'v_a, T>, Error>
+    ) -> Result<InstructorResponse<T>, Error>
     where
-        Self: Sized + ValidateArgs<'v_a> + BaseSchema<'v_a>,
+        Self: Sized + ValidateArgs<'static> + BaseSchema,
     {
         let message = &completion.choices[0].message;
         match model {
@@ -302,15 +301,14 @@ where
                     None => Err(Error::Generic("No tool calls found".to_string())),
                 }
             }
-            IterableOrSingle::Phantom(_) => Err(Error::Generic("Cannot unwrap phantomData".to_string())),
         }
     }
 }
 
 
-fn validate_single<'v_a, A, T>(data: T, validation_context: A) -> Result<T, Error> 
+fn validate_single<A, T>(data: T, validation_context: A) -> Result<T, Error> 
 where
-    T: ValidateArgs<'v_a, Args=A> + BaseSchema<'v_a>,
+    T: ValidateArgs<'static, Args=A> + BaseSchema,
     A: BaseArg,
 {
     match data.validate_args(validation_context) {  

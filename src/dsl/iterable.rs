@@ -17,7 +17,7 @@ use futures::pin_mut;
 
 pub trait IterableBase<Args, T> 
 where
-    T: ValidateArgs<'static, Args=Args> + BaseSchema<'static> + 'static ,
+    T: ValidateArgs<'static, Args=Args> + BaseSchema + 'static ,
     Args: BaseArg,
 {
     type Args : BaseArg;
@@ -27,24 +27,24 @@ where
         mode : Mode
     ) ->  Pin<Box<dyn Stream<Item = Result<String, Error>> + Send>>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<'static>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema;
 
     async fn from_streaming_response_async(
-        model: IterableOrSingle<'static, Self>,
+        model: IterableOrSingle<Self>,
         response: ChatCompletionResponseStream,
         validation_context: &Args,
         mode: Mode,
-    ) -> InstructorResponse<'static, T>
+    ) -> InstructorResponse<T>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<'static>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema;
     
     async fn tasks_from_chunks_async(
-        model: IterableOrSingle<'static, Self>,
+        model: IterableOrSingle<Self>,
         json_chunks: JsonStream,
         validation_context: Args
-    ) -> InstructorResponse<'static, T>
+    ) -> InstructorResponse<T>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<'static>;
+        Self: Sized + ValidateArgs<'static> + BaseSchema;
 
     fn get_object(s: &str, index: usize) -> (Option<String>, String);
 }
@@ -52,7 +52,7 @@ where
 
 impl<A, T> IterableBase<A, T> for T
 where
-    T: ValidateArgs<'static, Args=A> + BaseSchema<'static> + 'static ,
+    T: ValidateArgs<'static, Args=A> + BaseSchema + 'static ,
     A: BaseArg + 'static,
 {
     type Args = A;
@@ -62,7 +62,7 @@ where
         mode: Mode
     ) -> Pin<Box<dyn Stream<Item = Result<String, Error>> + Send>>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<'static>
+        Self: Sized + ValidateArgs<'static> + BaseSchema
     {
         let stream = completion.filter_map(move |chunk_result| {
             async move {
@@ -95,13 +95,13 @@ where
     }
 
     async fn from_streaming_response_async(
-        model: IterableOrSingle<'static, Self>,
+        model: IterableOrSingle<Self>,
         response: ChatCompletionResponseStream,
         validation_context: &Self::Args,
         mode: Mode,
-    ) -> InstructorResponse<'static, T>
+    ) -> InstructorResponse<T>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<'static>
+        Self: Sized + ValidateArgs<'static> + BaseSchema
     { 
 
         let mut json_chunks  = Self::extract_json_async(response, mode);
@@ -114,12 +114,12 @@ where
     }
 
     async fn tasks_from_chunks_async(
-        model: IterableOrSingle<'static, Self>,
+        model: IterableOrSingle<Self>,
         json_chunks: JsonStream,
         validation_context: Self::Args,
-    ) -> InstructorResponse<'static, T>
+    ) -> InstructorResponse<T>
     where
-        Self: Sized + ValidateArgs<'static> + BaseSchema<'static>,
+        Self: Sized + ValidateArgs<'static> + BaseSchema,
     {
         let mut started = false;
         let mut potential_object = String::new();
