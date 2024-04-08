@@ -1,89 +1,136 @@
-use crate::traits::BaseSchema;
-use validator::ValidateArgs;
+use crate::openai_schema::BaseSchema;
+use validator::{ValidateArgs, ValidationErrors};
 use crate::error::Error;
 use async_openai::types::{CreateChatCompletionResponse, ChatCompletionResponseStream};
+use std::pin::Pin;
+use futures::stream::Stream;
+use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
+use std::fmt::{Formatter, Debug};
+use crate::mode::Mode;
 
 pub enum ChatCompletionResponseWrapper {
-    Single(CreateChatCompletionResponse),
+    AtOnce(CreateChatCompletionResponse),
     Stream(ChatCompletionResponseStream),
 }
 
 impl ChatCompletionResponseWrapper {
-    pub fn get_message(&self) -> Option<String> {
+    pub fn get_llm_test_response(&self, mode : Mode ) -> Option<String> {
         match self {
-            ChatCompletionResponseWrapper::Single(resp) => {
-                let message = resp.choices.get(0).unwrap().message.content.clone().unwrap();
-                Some(message)
-            },
-            ChatCompletionResponseWrapper::Stream(iter) => {
-                /* let mut buffer = String::new();
-                for result in iter {
-                    match result {
-                        Ok(ChatCompletionStreamingResponse::Chunk(chunk)) => {
-                            match &chunk.choices[0].delta {
-                                Delta::Content { content } => {
-                                    buffer.push_str(&content);
-                                }
-                                Delta::Empty {} => {}
-                            }
-                        }
-                        _ => {}
+            ChatCompletionResponseWrapper::AtOnce(resp) => {
+                println!("resp: {:?}", resp);
+                //TODO make this work for tool calls as well currently it is assumed
+                match mode {
+                    Mode::JSON | Mode::MD_JSON | Mode::JSON_SCHEMA => {
+                        let message = resp.choices.get(0).unwrap().message.content.clone().unwrap();
+                        Some(message)
                     }
-                };
-                buffer */
-                None
+                    Mode::TOOLS => {
+                        let message = resp.choices.get(0).unwrap()
+                        .message
+                        .tool_calls.as_ref().unwrap() // Use as_ref() to borrow
+                        .iter()
+                        .map(|x| x.function.arguments.clone()) // Clone to move
+                        .collect::<Vec<String>>().join(", ");
+                        Some(message)
+                    },
+
+                }
+            },
+            ChatCompletionResponseWrapper::Stream(_) => {
+                Some("".to_string()) // we will not reask in case of streaming error so this will never be used
             }
         }
     }
 
-    pub fn get_single(self) -> Result<CreateChatCompletionResponse, Error> {
+    pub fn get_AtOnce(self) -> Result<CreateChatCompletionResponse, Error> {
         match self {
-            ChatCompletionResponseWrapper::Single(resp) => Ok(resp),
-            ChatCompletionResponseWrapper::Stream(iter) => Err(Error::Generic("Got a stream".to_string())),
+            ChatCompletionResponseWrapper::AtOnce(resp) => Ok(resp),
+            ChatCompletionResponseWrapper::Stream(_) => Err(Error::Generic("Got a stream".to_string())),
         }
     }
 }
 
 //TODO implement more traits for the enum, for multiprocessing and ...
-#[derive(Debug)]
-pub enum InstructorResponse<A, T>
-    where T: ValidateArgs<'static, Args=A> + BaseSchema<T>,
-    A: 'static + Copy,
+pub enum InstructorResponse<T>
+    where T: ValidateArgs<'static> + BaseSchema,
 {
     One(T),
     Many(Vec<T>),
-    //Stream(Box<dyn Iterator<Item = Result<T, StreamingError>>>),
+    Stream(Pin<Box<dyn Stream<Item = Result<T, Error>> + Send>>),
 }
 
 pub enum MaybeStream<T> {
-    //Stream(Box<dyn Iterator<Item = Result<T, StreamingError>>>),
+    Stream(Pin<Box<dyn Stream<Item = Result<T, Error>> + Send>>),
     One(T),
     Many(Vec<T>),
 }
 
-/* impl<T> MaybeStream<T> {
-    ///gets the first item from the stream, or the first item in the vector, or the first item in the stream
-    pub fn unwrap(self) -> Result<T, StreamingError> {
+impl<T> InstructorResponse<T>
+where
+    T: ValidateArgs<'static> + BaseSchema,
+{
+    pub fn unwrap(self) -> Result<T, Error> {
         match self {
-            MaybeStream::One(item) => Ok(item),
-            MaybeStream::Many(items) => Ok(items.into_iter().next().unwrap()),
-            MaybeStream::Stream(iter) => iter.into_iter().next().unwrap(),
+            InstructorResponse::One(item) => Ok(item),
+            InstructorResponse::Many(mut items) => Ok(items.pop().expect("InstructorResponse::Many should not be empty")),
+            InstructorResponse::Stream(_) => Err(Error::Generic("Cannot unwrap a stream".to_string())),
         }
     }
 }
 
-impl<A, T> InstructorResponse<A, T>
-where
-    T: ValidateArgs<'static, Args = A> + BaseSchema<T>,
-    A: 'static + Copy,
+
+impl<T> Debug for InstructorResponse<T> 
+where T: ValidateArgs<'static> + BaseSchema
 {
-    pub fn unwrap(self) -> T {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
-            InstructorResponse::One(item) => item,
-            InstructorResponse::Many(mut items) => items.pop().expect("InstructorResponse::Many should not be empty"),
+            InstructorResponse::One(item) => write!(f, "One({:?})", item),
+            InstructorResponse::Many(items) => write!(f, "Many({:?})", items),
+            InstructorResponse::Stream(iter) => write!(f, "Stream({:?})", iter.size_hint()),
         }
     }
-} */
+}
+
+#[derive(Debug, Serialize, Copy, Clone, JsonSchema)]
+pub enum IterableOrSingle<T>
+where T: ValidateArgs<'static> + BaseSchema
+{
+    Iterable(T), 
+    Single(T),
+}
+
+impl<T> IterableOrSingle<T>
+where 
+    T: ValidateArgs<'static> + BaseSchema
+{
+    // This method is now correctly placed outside the ValidateArgs trait impl block
+    pub fn unwrap(self) -> Result<T, ()> {
+        match self {
+            IterableOrSingle::Iterable(item) | IterableOrSingle::Single(item) => Ok(item),
+        }
+    }
+}
 
 
+impl<T> ValidateArgs<'static> for IterableOrSingle<T>
+where
+    T: ValidateArgs<'static> + BaseSchema,
+{
+    type Args = T::Args;
+
+    fn validate_args(&self, args: Self::Args) -> Result<(), ValidationErrors> {
+        match self {
+            IterableOrSingle::Iterable(item) | IterableOrSingle::Single(item) => {
+                item.validate_args(args)
+            },
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub enum Iterable<T> {
+    VecWrapper(Vec<T>),
+    // You can add more variants here if you need to wrap T in different iterable types
+}
 

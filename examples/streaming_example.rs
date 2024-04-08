@@ -13,35 +13,24 @@ use async_openai::types::{
     ChatCompletionRequestUserMessageContent
 };
 use async_openai::Client;
-
-
+use instructor_rs::enums::InstructorResponse;
+use futures::stream::StreamExt;
+use instructor_rs::utils::to_sync;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-
     let client = Client::new();
-    let patched_client = Patch { client, mode: Some(Mode::TOOLS) };
+    let patched_client = Patch { client, mode: Some(Mode::JSON) };
 
-    #[derive(JsonSchema, Serialize, Debug, Default, Deserialize, Clone)] 
-    ///we cannot use #[derive_all] here as enums cannot derive Validate Trait
-    enum TestEnum {
-        #[default]
-        PM,
-        AM,
-    }
-
-    #[derive_all]
+  
     ///we use rust macros to derive certain traits in order to serialize/deserialize format as json and Validate
     ///#[derive(
     ///  JsonSchema, Serialize, Debug, Default, 
     ///  Validate, Deserialize, Clone 
     ///)]
-    #[schemars(description = "this is a description of the weather api")]
-    struct Weather {
-        //#[schemars(description = "am or pm")]
-        //time_of_day: TestEnum,
-        #[schemars(description = "this is the hour from 1-12")]
-        time: i64,
-        city: String,
+    #[derive_all]    
+    struct Number {
+        #[schemars(description = "the value")]
+        value: i64,
     }
     
     let req = CreateChatCompletionRequestArgs::default()
@@ -51,25 +40,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ChatCompletionRequestUserMessage{
                 role: Role::User,
                 content:    ChatCompletionRequestUserMessageContent::Text(String::from("
-                what is the weather at 10 in the evening in new york? 
-                and what is the whether in the biggest city in Denmark in the evening?
+                write 2 numbers in the specified json format
                 ")),
                 name: None,
             }
         )],
-    ).build().unwrap();
+    )
+    .stream(true)
+    .model(GPT4_TURBO_PREVIEW.to_string())
+    .build().unwrap();
+
 
     let result = patched_client.chat_completion(
         ///we wrap in an Iterable enum to allow more than one function call 
         /// a bit like List[Type[BaseModel]] or Iterable[Type[BaseModel]] in instructor
-        IterableOrSingle::Iterable(Weather::default()),
+        IterableOrSingle::Iterable(Number::default()),
         (),
         1,
         req,
     );
 
-    println!("result: {:?}", result.await);
-    ///Ok(Many([Weather { time: 10, city: "New York" }, Weather { time: 10, city: "Copenhagen" }]))
+    use std::time::Instant;
+
+    let model = result.await.unwrap(); // we accept panic when using unwrap()
+    match model {
+        InstructorResponse::Many(x) => println!("result: {:?}", x),
+        InstructorResponse::One(x) => println!("result: {:?}", x),
+        InstructorResponse::Stream(mut x) => {
+            let t0 = Instant::now();
+            while let Some(x) = x.next().await {
+                println!("model: {:?} at time {:?}", x, t0.elapsed());
+            }
+        },
+    }
+    /// model: Number { value: 1 } at time 1.1
+    /// model: Number { value: 2 } at time 1,8
     Ok(())
 }
 
