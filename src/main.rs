@@ -1,3 +1,4 @@
+use instructor_rs::openai_schema::OpenAISchema;
 use schemars::JsonSchema;
 use std::{env, vec};
 use instructor_rs::mode::Mode;  
@@ -10,36 +11,39 @@ use instructor_rs::common::GPT4_TURBO_PREVIEW;
 use async_openai::types::{
     CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
     ChatCompletionRequestUserMessage, ChatCompletionRequestMessage, Role,
-    ChatCompletionRequestUserMessageContent
+    ChatCompletionRequestUserMessageContent, ChatCompletionTool, ChatCompletionToolType
 };
 use async_openai::Client;
-use validator::ValidationError;
-use async_stream::stream;
 use instructor_rs::enums::InstructorResponse;
 use futures::stream::{Stream, StreamExt, iter};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new();
-    let patched_client = Patch { client, mode: Some(Mode::JSON) };
+    let patched_client = Patch { client, mode: Some(Mode::TOOLS) };
 
   
+    #[derive(JsonSchema, Serialize, Debug, Default, Deserialize, Clone)] 
+    ///we cannot use #[derive_all] here as enums cannot derive Validate Trait
+    enum TestEnum {
+        #[default]
+        PM,
+        AM,
+    }
+
+    #[derive_all]
     ///we use rust macros to derive certain traits in order to serialize/deserialize format as json and Validate
     ///#[derive(
     ///  JsonSchema, Serialize, Debug, Default, 
     ///  Validate, Deserialize, Clone 
     ///)]
     #[schemars(description = "this is a description of the weather api")]
-    #[derive(
-        JsonSchema, Serialize, Debug, Default, 
-        Validate, Deserialize, Clone
-    )]
-        
-    struct Number {
+    struct Weather {
         //#[schemars(description = "am or pm")]
         //time_of_day: TestEnum,
-        #[schemars(description = "the value")]
-        value: i64,
+        #[schemars(description = "this is the hour from 1-12")]
+        time: i64,
+        city: String,
     }
     
     let req = CreateChatCompletionRequestArgs::default()
@@ -49,7 +53,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ChatCompletionRequestUserMessage{
                 role: Role::User,
                 content:    ChatCompletionRequestUserMessageContent::Text(String::from("
-                write 2 numbers, IT MUST BE 2 JSON OBJECTS
+                what is the weather at 10 in the evening in new york? 
+                and what is the whether in the biggest city in Denmark in the evening?
                 ")),
                 name: None,
             }
@@ -63,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let result = patched_client.chat_completion(
         ///we wrap in an Iterable enum to allow more than one function call 
         /// a bit like List[Type[BaseModel]] or Iterable[Type[BaseModel]] in instructor
-        IterableOrSingle::Iterable(Number::default()),
+        IterableOrSingle::Iterable(Weather::default()),
         (),
         1,
         req,
@@ -88,8 +93,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(e) => println!("error: {:?}", e),
     }
-    ///Ok(Many([Weather { time: 10, city: "New York" }, Weather { time: 10, city: "Copenhagen" }]))
-    
     Ok(())
 }
 

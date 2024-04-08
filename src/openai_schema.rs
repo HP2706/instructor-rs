@@ -9,7 +9,7 @@ use crate::enums::IterableOrSingle;
 use crate::mode::Mode;
 use crate::utils::extract_json_from_codeblock;
 use async_openai::types::CreateChatCompletionResponse;
-use async_openai::types::{ChatCompletionMessageToolCall, FunctionObject };
+use async_openai::types::{ChatCompletionMessageToolCall, FunctionObject, ChatCompletionTool };
 
 pub trait BaseSchema: 
      Debug + Serialize + for<'de> Deserialize<'de> + 
@@ -79,9 +79,12 @@ where
 {
     type Args = A;
 
-    // The rest of your implementation remains the same...
+    // The rest of your implementation remains the same..
 
-    fn openai_schema() -> String where T: serde::Serialize + JsonSchema {
+    fn openai_schema() -> String 
+    where 
+        T: serde::Serialize + JsonSchema 
+    {
         let schema = schemars::schema_for!(T);
         let schema_json = serde_json::to_value(&schema).unwrap();
     

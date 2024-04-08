@@ -51,9 +51,8 @@ where
             };
 
             let message = format!(
-                "As a genius expert, your task is to understand the content and provide \
-                the parsed objects in json that match the following json_schema:\n\n\
-                {}\n\n\
+                "As a genius expert, your task is to understand the content and provide
+                the parsed objects in json that match the following json_schema:\n{}\n
                 Make sure to return an instance of the JSON, not the schema itself",
                 schema
             );
@@ -83,6 +82,7 @@ where
                             name: None,
                         }
                     );
+                    kwargs.messages.push(user_message);
                 },
                 _ => {}
             }

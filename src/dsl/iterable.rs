@@ -74,14 +74,21 @@ where
                             Mode::JSON | Mode::MD_JSON | Mode::JSON_SCHEMA => {
                                 chunk.choices.get(0).and_then(|choice| {
                                     // Here, we clone the content of the choice, if necessary
-                                    choice.delta.content.clone().map(|content| Ok(Ok(content)))
+                                    choice.delta.content.clone().map(
+                                        |content| Ok(Ok(content))
+                                    )
                                 })
                             },
                             Mode::TOOLS => {
-                                // Handling for Mode::TOOLS
-                                Some(Err(Error::Generic(
-                                    format!("Mode {:?} is not supported for MultiTask streaming", mode)
-                                )))
+                                if let Some(choice) = chunk.choices.get(0) {
+                                    if let Some(arguments) = choice.delta.tool_calls.as_ref()
+                                        .and_then(|tc| tc.get(0))
+                                        .and_then(|call| call.function.as_ref())
+                                        .and_then(|f| f.arguments.clone()) {
+                                        return Some(Ok(Ok(arguments)));
+                                    }
+                                }
+                                None // else we return None
                             },
                             _ => Some(Err(Error::Generic(
                                 format!("Mode {:?} is not supported for MultiTask streaming", mode)
@@ -143,18 +150,15 @@ where
                             // Ensure model_validate_json and its entire call chain are `Send`
                             match Self::model_validate_json(&model, &task_json, &validation_context) {
                                 Ok(single) => {
-                                    println!("yielding: {:?}", single);
                                     yield Ok(single.unwrap().unwrap());
                                 },
                                 Err(e) => {
-                                    println!("error line 151: {:?}", e);
                                     yield Err(e);
                                 },
                             }
                         }
                     },
                     Err(e) => {
-                        println!("error line 157: {:?}", e);
                         yield Err(e);
                     },
                 }
