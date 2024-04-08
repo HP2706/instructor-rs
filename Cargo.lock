@@ -597,6 +597,7 @@ dependencies = [
  "dotenvy",
  "futures",
  "model_traits_macro",
+ "pin-utils",
  "rand",
  "schemars",
  "serde",

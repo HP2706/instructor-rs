@@ -20,7 +20,7 @@ use validator::ValidationError;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = Client::new();
-    let patched_client = Patch { client, mode: Some(Mode::JSON) };
+    let patched_client = Patch { client, mode: Some(Mode::TOOLS) };
 
     #[derive(JsonSchema, Serialize, Debug, Default, Deserialize, Clone)] 
     ///we cannot use #[derive_all] here as enums cannot derive Validate Trait
@@ -54,12 +54,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 content:    ChatCompletionRequestUserMessageContent::Text(String::from("
                 what is the weather at 10 in the evening in new york? 
                 and what is the whether in the biggest city in Denmark in the evening?
+                return in specified json format
                 ")),
                 name: None,
             }
         )],
     ).build().unwrap();
-
 
     let result = patched_client.chat_completion(
         ///we wrap in an Iterable enum to allow more than one function call 

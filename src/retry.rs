@@ -14,6 +14,15 @@ use async_openai::error::OpenAIError;
 use crate::enums::{InstructorResponse, ChatCompletionResponseWrapper};
 use crate::enums::IterableOrSingle;
 
+
+/// this function generates the retry messages for the given mode and exception, 
+/// to better inform the llm as to how to fix the error
+/// # Arguments
+/// * `model_message`: `String` - the model message to use for the retry
+/// * `mode`: `Mode` - the mode to use for processing the response
+/// * `exception`: `impl fmt::Display` - the exception to use for the retry
+/// # Returns
+/// * `Vec<ChatCompletionRequestMessage>` - the retry messages
 pub fn reask_messages(
     model_message: String,
     mode: Mode,
@@ -22,7 +31,6 @@ pub fn reask_messages(
     
 
     //we extract the message from the stream or simply via message.choices[0].message.content
-    //let message_content = response.get_message();
     let message = ChatCompletionRequestMessage::Assistant(
         ChatCompletionRequestAssistantMessage{
             role: Role::Assistant,
@@ -65,6 +73,16 @@ pub fn reask_messages(
     messages
 }
 
+///This function takes a reference to a function as input.
+///arguable whether this is a good idea, but trying to replicate the instructpr api as closely as possible
+/// the it tries to process the response, if suceeding it returns the response else, it tri until it reaches max_retries
+/// #Arguments 
+/// * `func` a function that takes CreateChatCompletionRequest and returns a future of type Result<ChatCompletionResponseWrapper, OpenAIError>
+/// * `response_model` the response model to use for processing the response
+/// * `validation_context` the validation context to use for validating each struct
+/// * `kwargs` the request object to modify
+/// * `max_retries` the maximum number of retries to attempt
+/// * `mode` the mode to use for processing the response 
 pub async fn retry_async<T, A>(
     func: Box<dyn Fn(CreateChatCompletionRequest) -> Pin<Box<dyn Future<Output = Result<ChatCompletionResponseWrapper, OpenAIError>> + Send>> + Send + 'static>,
     response_model: IterableOrSingle<T>,
@@ -80,12 +98,11 @@ where
     let mut attempt = 0;
 
     while attempt < max_retries {
-        println!("message to model\n\n {:?}", kwargs.messages);
-        println!("attempt: {}", attempt);
         let response = func(kwargs.clone());
         match response.await {
             Ok(_response) => {
-                let model_message = _response.get_message();
+                //we fetch the model message from the response before we process the response
+                let model_message = _response.get_llm_test_response(mode);
                 let result = process_response_async(
                     _response,
                     response_model.clone(),
@@ -96,25 +113,24 @@ where
                 match result {
                     Ok(result) => return Ok(result),
                     Err(e) => {
-                        println!("Error: {}", e);
                         //TODO think about how would 
                         //can use response here and whether you can use it as is or not
+                        if kwargs.stream.unwrap_or(false) {
+                            return Err(e);
+                        }
+                        
                         match model_message {
                             Some(message) => {
                                 let messages = reask_messages(message, mode, e);
-                                println!("number of messages before: {}", kwargs.messages.len());
                                 kwargs.messages.extend(messages);
-                                println!("number of messages after: {}", kwargs.messages.len());
                                 attempt += 1;
                                 continue;
                             }
                             None => {
-                                return Err(Error::Generic(format!("Error: {}", e).to_string()));
+                                return Err(e);
                             }
                         }
-                    } //TODO BETTER ERROR HANDLING ANOTHER LOOP SHOULD ONLY GET RUN IF ERROR IS 
-                    //JSONDECODEERROR(SERDE ERROR) OR
-                    //VALIDATIONERROR
+                    } 
                 }
             }
             Err(e) => {

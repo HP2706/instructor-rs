@@ -1,4 +1,4 @@
-use crate::openai_schema::{BaseArg, BaseSchema};
+use crate::openai_schema::BaseSchema;
 use validator::{ValidateArgs, ValidationErrors};
 use crate::error::Error;
 use async_openai::types::{CreateChatCompletionResponse, ChatCompletionResponseStream};
@@ -7,45 +7,46 @@ use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
 use std::fmt::{Formatter, Debug};
-
+use crate::mode::Mode;
 
 pub enum ChatCompletionResponseWrapper {
-    Single(CreateChatCompletionResponse),
+    AtOnce(CreateChatCompletionResponse),
     Stream(ChatCompletionResponseStream),
 }
 
 impl ChatCompletionResponseWrapper {
-    pub fn get_message(&self) -> Option<String> {
+    pub fn get_llm_test_response(&self, mode : Mode ) -> Option<String> {
         match self {
-            ChatCompletionResponseWrapper::Single(resp) => {
-                let message = resp.choices.get(0).unwrap().message.content.clone().unwrap();
-                Some(message)
-            },
-            ChatCompletionResponseWrapper::Stream(iter) => {
-                /* let mut buffer = String::new();
-                for result in iter {
-                    match result {
-                        Ok(ChatCompletionStreamingResponse::Chunk(chunk)) => {
-                            match &chunk.choices[0].delta {
-                                Delta::Content { content } => {
-                                    buffer.push_str(&content);
-                                }
-                                Delta::Empty {} => {}
-                            }
-                        }
-                        _ => {}
+            ChatCompletionResponseWrapper::AtOnce(resp) => {
+                println!("resp: {:?}", resp);
+                //TODO make this work for tool calls as well currently it is assumed
+                match mode {
+                    Mode::JSON | Mode::MD_JSON | Mode::JSON_SCHEMA => {
+                        let message = resp.choices.get(0).unwrap().message.content.clone().unwrap();
+                        Some(message)
                     }
-                };
-                buffer */
-                None
+                    Mode::TOOLS => {
+                        let message = resp.choices.get(0).unwrap()
+                        .message
+                        .tool_calls.as_ref().unwrap() // Use as_ref() to borrow
+                        .iter()
+                        .map(|x| x.function.arguments.clone()) // Clone to move
+                        .collect::<Vec<String>>().join(", ");
+                        Some(message)
+                    },
+
+                }
+            },
+            ChatCompletionResponseWrapper::Stream(_) => {
+                Some("".to_string()) // we will not reask in case of streaming error so this will never be used
             }
         }
     }
 
-    pub fn get_single(self) -> Result<CreateChatCompletionResponse, Error> {
+    pub fn get_AtOnce(self) -> Result<CreateChatCompletionResponse, Error> {
         match self {
-            ChatCompletionResponseWrapper::Single(resp) => Ok(resp),
-            ChatCompletionResponseWrapper::Stream(iter) => Err(Error::Generic("Got a stream".to_string())),
+            ChatCompletionResponseWrapper::AtOnce(resp) => Ok(resp),
+            ChatCompletionResponseWrapper::Stream(_) => Err(Error::Generic("Got a stream".to_string())),
         }
     }
 }
@@ -73,7 +74,7 @@ where
         match self {
             InstructorResponse::One(item) => Ok(item),
             InstructorResponse::Many(mut items) => Ok(items.pop().expect("InstructorResponse::Many should not be empty")),
-            InstructorResponse::Stream(iter) => Err(Error::Generic("Cannot unwrap a stream".to_string())),
+            InstructorResponse::Stream(_) => Err(Error::Generic("Cannot unwrap a stream".to_string())),
         }
     }
 }

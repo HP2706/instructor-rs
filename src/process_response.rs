@@ -5,20 +5,26 @@ use crate::openai_schema::OpenAISchema;
 use crate::dsl::iterable::IterableBase;
 use crate::error::Error;
 use crate::enums::IterableOrSingle;
-use std::collections::HashMap;
 use crate::enums::InstructorResponse;
 use async_openai::types::{
-    ChatCompletionRequestMessage, ChatCompletionRequestSystemMessage, ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageContent, ChatCompletionResponseFormat, ChatCompletionResponseFormatType, ChatCompletionTool, ChatCompletionToolType, CreateChatCompletionRequest, CreateChatCompletionResponse, Role 
+    ChatCompletionRequestMessage, ChatCompletionRequestSystemMessage, ChatCompletionRequestUserMessage, 
+    ChatCompletionRequestUserMessageContent, ChatCompletionResponseFormat, ChatCompletionResponseFormatType, 
+    ChatCompletionTool, ChatCompletionToolType, CreateChatCompletionRequest, Role 
 };
-
-
 use crate::enums::ChatCompletionResponseWrapper;
 
+/// this function ads a prompt to the request messages or to the tools field(preferred) 
+/// 
+/// # Arguments
+/// * `response_model`: `&IterableOrSingle<T>` - a reference to an enum wrapper that is very similar to Iterable[model] in instructor
+///   Can be either a single instance or an iterable collection of instances, depending on the use case.
+/// * `mode`: `Mode` - the mode to use for processing the response
+/// * `kwargs`: `&mut CreateChatCompletionRequest` - a mutable reference to a request object to modify
 pub fn handle_response_model<A, T>(
-    response_model: IterableOrSingle<T>, 
+    response_model: &IterableOrSingle<T>, 
     mode: Mode, 
     kwargs : &mut CreateChatCompletionRequest
-) -> Result<IterableOrSingle<T>, Error>
+) -> Result<(), Error>
 where
     T: ValidateArgs<'static, Args=A> + BaseSchema,
     A: BaseArg,
@@ -57,7 +63,6 @@ where
                 schema
             );
 
-
             match mode {
                 Mode::JSON => {
                     kwargs.response_format = Some(
@@ -87,7 +92,7 @@ where
                 },
                 _ => {}
             }
-            
+
             match &mut kwargs.messages[0] {
                 ChatCompletionRequestMessage::System(kwargs_message) => {
                     kwargs_message.content += &message;
@@ -104,12 +109,21 @@ where
             }
         }  
     }
-
-    return Ok(response_model);
-        
-    
+    Ok(())
 }
 
+/// this function processes the response based on the mode and the response_model and parses the response accordingly. 
+/// It supports both streaming outputs and non-streaming outputs.
+/// 
+/// # Arguments
+/// * `response`: `ChatCompletionResponseWrapper` - the response from the OpenAI API
+/// * `response_model`: `IterableOrSingle<T>` - the response model to use for processing the response
+/// * `validation_context`: `&A` - the validation context to use for processing the response
+/// * `mode`: `Mode` - the mode to use for processing the response
+/// 
+/// # Returns
+/// * `Result<InstructorResponse<T>, Error>` - the result of the response processing
+/// 
 pub async fn process_response_async<T, A>(
     response: ChatCompletionResponseWrapper,
     response_model : IterableOrSingle<T>,
@@ -121,43 +135,14 @@ where
     A: BaseArg + 'static,
 {   
     
-
-    /* 
-    //TODO
-    if response_model is None:
-        logger.debug("No response model, returning response as is")
-        return response
-
-    if (
-        inspect.isclass(response_model)
-        and issubclass(response_model, (IterableBase, PartialBase))
-        and stream
-    ):
-        model = response_model.from_streaming_response(
-            response,
-            mode=mode,
-        )
-        return model
-    */
     match response {
         ChatCompletionResponseWrapper::Stream(res) => {
             println!("streaming response");
             let res = T::from_streaming_response_async(response_model, res, validation_context, mode).await;
             Ok(res)
         }
-        ChatCompletionResponseWrapper::Single(res) => {
+        ChatCompletionResponseWrapper::AtOnce(res) => {
             return T::from_response(&response_model, &res, validation_context, mode);
         }
     }
-    
 }
-
-/* fn extract_response_model<T>(
-    response_model: IterableOrSingle<T>, 
-    mode: Mode, 
-    kwargs : ChatCompletionRequest
-) -> Result<>, Error> {
-    return Ok(response_model);
-}
-
- */

@@ -1,21 +1,17 @@
 use crate::error::Error;
 use std::borrow::BorrowMut;
-use std::pin::Pin;
-use futures::stream::{Stream ,StreamExt, iter};
-use futures::Future;
+use futures::stream::StreamExt;
 use crate::types::JsonStream;
 use async_stream::stream;
 use async_openai::types::{
-    ChatCompletionResponseMessage, ChatChoice, Role, ChatCompletionMessageToolCall,ChatCompletionToolType, 
-    CreateChatCompletionResponse, FunctionCall,
-    CreateChatCompletionStreamResponse, ChatCompletionResponseStream, ChatChoiceStream,
-    ChatCompletionStreamResponseDelta, 
+    ChatChoice, ChatChoiceStream,ChatCompletionToolType,  ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk, ChatCompletionResponseMessage, ChatCompletionResponseStream, ChatCompletionStreamResponseDelta, CreateChatCompletionResponse, CreateChatCompletionStreamResponse, FunctionCall, FunctionCallStream, Role
 };
 pub fn to_sync<T>(future: impl std::future::Future<Output = T>) -> T {
     tokio::runtime::Runtime::new().unwrap().block_on(future)
 }
 
 pub fn extract_json_from_codeblock(content: &str) -> Result<String, Error> {
+    println!("extract_json_from_codeblock, content: {:?}", content);
     let first_paren = content.find('{');
     let last_paren = content.rfind('}');
 
@@ -117,9 +113,21 @@ pub async fn create_chat_completion_stream(
                     finish_reason: None,
                     logprobs: None,
                     delta: ChatCompletionStreamResponseDelta {
-                    content: Some(chunk.unwrap()),
+                    content: Some(chunk.as_ref().clone().unwrap().to_string()),
                     function_call: None,
-                    tool_calls: None,
+                    tool_calls: {
+                        Some(vec![
+                            ChatCompletionMessageToolCallChunk{
+                                index : 0,
+                                id : None,
+                                r#type: None,
+                                function: Some(FunctionCallStream {
+                                    name : None,
+                                    arguments : Some(chunk.unwrap())
+                                })
+                            }
+                        ])
+                    },
                     role: None
                     }
                 }]
@@ -138,6 +146,8 @@ pub async fn create_chat_completion_stream(
 pub async fn string_to_stream(text: String) -> JsonStream {
     stream! {
         for word in text.chars() {
+            //sleep for 0.1 seconds
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             yield Ok(word.to_string());
         }
     }.boxed()

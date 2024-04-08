@@ -9,7 +9,7 @@ use crate::enums::IterableOrSingle;
 use crate::mode::Mode;
 use crate::utils::extract_json_from_codeblock;
 use async_openai::types::CreateChatCompletionResponse;
-use async_openai::types::{ChatCompletionMessageToolCall, FunctionObject, ChatCompletionTool };
+use async_openai::types::{ChatCompletionMessageToolCall, FunctionObject };
 
 pub trait BaseSchema: 
      Debug + Serialize + for<'de> Deserialize<'de> + 
@@ -27,16 +27,52 @@ impl<A> BaseArg for A
 where A: Clone + Send + Sync  + 'static{}
 
 
+///this is the trait that implements the functionality similar to OpenAISchema in the instructor python library
+/// in order to use with your struct, your strutc must implement the following traits:
+/// JsonSchema, Serialize, Debug, Default, Validate, Deserialize, Clone
+/// this can be done either via #[derive(JsonSchema, Serialize, Debug, Default, Validate, Deserialize, Clone)] or by importing
+/// model_traits_macro::derive_all and calling [derive_all] on your struct
+/// 
+/// Example
+/// 
+/// #[derive_all]
+/// struct MyStruct {
+///     a: i32,
+///     b: i32,
+/// }
+/// 
+/// now you can access the following methods:
+/// 
+/// Mystruct::openai_schema(...)
+/// Mystruct::tool_schema(...)
+/// Mystruct::model_validate_json(...)
+/// Mystruct::from_response(...)
 pub trait OpenAISchema<Args, T> 
 where
     T: ValidateArgs<'static, Args=Args> + BaseSchema,
     Args: BaseArg,
 {
     type Args : BaseArg;
+
+    ///returns the openai schema for the struct in a nice format that the LLM can understand
     fn openai_schema() -> String; 
 
+    ///returns the openai schema for the struct as a FunctionObject 
+    /// that can be used in tools field (functions are deperecated)
     fn tool_schema() -> FunctionObject;
  
+    ///parses the model from string to struct and does struct validation
+    /// # Arguments
+    /// 
+    /// * `model` - The model to use (IterableOrSingle::Iterable(model) or IterableOrSingle::Single(model)) 
+    ///     if Iterable() is used the model will know to parse an array of json ie {...},{...} into two structs 
+    ///     if Single() is used the model will know to parse a single json ie {...} into a single struct
+    /// * `data` - The string to parse
+    /// * `validation_context` - The validation context to use 
+    /// (this is if you have validator functions that require custom context exactly like validation_context in pydantic)
+    /// # Returns
+    /// * `InstructorResponse::One(data)` - If the model is a single object
+    /// * `InstructorResponse::Many(data)` - If the model is an iterable of objects
     fn model_validate_json(
         model: &IterableOrSingle<Self>, 
         data: &str, 
@@ -45,6 +81,18 @@ where
     where
         Self: Sized + ValidateArgs<'static> + BaseSchema;
     
+    ///takes a response and parses it into the struct using functions like model_validate_json()
+    /// #Arguments
+    /// * `model`  - The model to use (IterableOrSingle::Iterable(model) or IterableOrSingle::Single(model)) 
+    ///     if Iterable() is used the model will know to parse an array of json ie {...},{...} into two structs 
+    ///     if Single() is used the model will know to parse a single json ie {...} into a single struct
+    /// * `response` - The response to parse
+    /// * `validation_context` - The validation context to use 
+    ///     (this is if you have validator functions that require custom context exactly like validation_context in pydantic)
+    /// * `mode` - The mode to extract the json in 
+    /// # Returns
+    /// * `InstructorResponse::One(data)` - If the model is a single object
+    /// * `InstructorResponse::Many(data)` - If the model is an iterable of objects
     fn from_response(
         model: &IterableOrSingle<Self>,
         response: &CreateChatCompletionResponse,
@@ -54,6 +102,7 @@ where
     where
         Self: Sized + ValidateArgs<'static> + BaseSchema;
     
+    ///this function
     fn parse_json(
         model: &IterableOrSingle<Self>,
         completion: &CreateChatCompletionResponse,
@@ -87,53 +136,7 @@ where
     {
         let schema = schemars::schema_for!(T);
         let schema_json = serde_json::to_value(&schema).unwrap();
-    
-        // Extracting basic schema information
-        let title = schema_json["title"].as_str().unwrap_or_default().to_string();
-        let description = format!("Correctly extracted `{}` with all the required parameters with correct types", title);
-    
-        // Transforming definitions to match the desired format
-        let definitions = schema_json["definitions"].as_object().unwrap_or(&serde_json::Map::new()).clone();
-        let mut defs = serde_json::Map::new();
-        for (key, value) in definitions.iter() {
-            let mut def = value.clone();
-            if let Some(props) = def["properties"].as_object_mut() {
-                for (prop_key, prop_value) in props.iter_mut() {
-                    if let Some(schemars_desc) = prop_value["metadata"]["description"].take().as_str() {
-                        prop_value["description"] = serde_json::Value::String(schemars_desc.to_string());
-                    }
-                }
-            }
-            defs.insert(key.clone(), def);
-        }
-    
-        // Transforming properties to match the desired format
-        let properties = schema_json["properties"].as_object().unwrap_or(&serde_json::Map::new()).clone();
-        let mut parameters = serde_json::Map::new();
-        for (key, value) in properties.iter() {
-            let mut param = value.clone();
-            if let Some(schemars_desc) = param["metadata"]["description"].take().as_str() {
-                param["description"] = serde_json::Value::String(schemars_desc.to_string());
-            }
-            parameters.insert(key.clone(), param);
-        }
-    
-        // Required fields
-        let required = schema_json["required"].as_array().unwrap_or(&Vec::new()).clone();
-    
-        // Constructing the final schema in the desired format
-        let final_schema = serde_json::json!({
-            "name": title,
-            "description": description,
-            "parameters": {
-                "$defs": defs,
-                "properties": parameters,
-                "required": required,
-                "type": "object"
-            }
-        });
-    
-        serde_json::to_string_pretty(&final_schema).unwrap()
+        serde_json::to_string_pretty(&schema_json).unwrap()
     }
 
     fn tool_schema() -> FunctionObject {
@@ -196,7 +199,7 @@ where
             IterableOrSingle::Iterable(_) => {
                 let bracketed_data = &format!("[{}]", data);
                 let data = serde_json::from_str::<Vec<T>>(bracketed_data)
-                    .map_err(|e| Error::SerdeError(e)); // Convert serde_json::Error to your custom Error::SerdeError
+                    .map_err(|e| Error::SerdeError(e)); // Convert serde_json::Error to custom Error::SerdeError
                 data.and_then(|data| {
                     data.into_iter().map(|item| validate_single(item, validation_context.clone()))
                         .collect::<Result<Vec<T>, Error>>() 
@@ -239,6 +242,14 @@ where
         }
     }
 
+    ///this function is used to parse a string to multiple json objects, however the complexity of parsing is placed in model_validate_json
+    /// #Arguments
+    /// * `model` - The model to use (IterableOrSingle::Iterable(model) or IterableOrSingle::Single(model)) 
+    ///     if Iterable() is used the model will know to parse an array of json ie {...},{...} into two structs 
+    ///     if Single() is used the model will know to parse a single json ie {...} into a single struct
+    /// * `completion` - The response to parse
+    /// * `validation_context` - The validation context to use 
+    ///     (this is if you have validator functions that require custom context exactly like validation_context in pydantic)
     fn parse_json(
         model: &IterableOrSingle<Self>,
         completion: &CreateChatCompletionResponse,
@@ -248,6 +259,7 @@ where
         Self: Sized + ValidateArgs<'static> + BaseSchema,
     {
         let text = completion.choices[0].message.content.clone().unwrap();
+        println!("text: {}", text);
         let json_extract = extract_json_from_codeblock(&text);
         match json_extract {
             Ok(json_extract) => {
@@ -259,6 +271,14 @@ where
         }
     }
 
+    ///this function is used to parse the tools field in the response to one or more structs of type Self
+    /// # Arguments:
+    /// * `model` - The model to use (IterableOrSingle::Iterable(model) or IterableOrSingle::Single(model)) 
+    ///     if Iterable() is used the model will know to parse an array of json ie {...},{...} into two structs 
+    ///     if Single() is used the model will know to parse a single json ie {...} into a single struct
+    /// * `completion` - The response to parse
+    /// * `validation_context` - The validation context to use 
+    ///     (this is if you have validator functions that require custom context exactly like validation_context in pydantic)
     fn parse_tools(
         model: &IterableOrSingle<Self>,
         completion: &CreateChatCompletionResponse,
@@ -291,15 +311,8 @@ where
                                 check_tool_call::<T>(tool_call)
                             }).collect::<Result<Vec<String>, Error>>();
                         
-                        match tool_strings {
-                            Ok(tool_strings) => {
-                                //we merge string into one str separted by comma
-                                let merged_str = tool_strings.join(",");
-                                Self::model_validate_json(model, &merged_str, validation_context)
-                            }
-                            Err(e) => Err(e),
-                        }
-                    
+                        let merged_str = tool_strings?.join(",");
+                        Self::model_validate_json(model, &merged_str, validation_context)
                     }
                     None => Err(Error::Generic("No tool calls found".to_string())),
                 }
