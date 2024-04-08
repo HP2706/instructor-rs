@@ -1,4 +1,5 @@
-/* use schemars::JsonSchema;
+use instructor_rs::utils::to_sync;
+use schemars::JsonSchema;
 use std::{env, vec};
 use instructor_rs::mode::Mode;  
 use instructor_rs::patch::Patch;
@@ -17,11 +18,6 @@ use validator::ValidationError;
 use instructor_rs::enums::InstructorResponse;
 
 #[derive_all]
-///we use rust macros to derive certain traits in order to serialize/deserialize format as json and Validate
-///#[derive(
-///  JsonSchema, Serialize, Debug, Default, 
-///  Validate, Deserialize, Clone 
-///)]
 struct Movies {
     #[validate(length(min = 5, message = "movies must contain exactly 5 items"))]
     #[validate(custom(function = "check_are_soft"))]
@@ -47,44 +43,51 @@ struct IsSoft {
 
 ///we define our validation function for the soft_movies field
 /// This function calls an llm and checks if all movies are soft and or romantic
-async fn check_are_soft(value: &Vec<String>) -> Result<(), ValidationError> {
+fn check_are_soft(value: &Vec<String>) -> Result<(), ValidationError> {
     let client = Client::new();
     let patched_client = Patch { client, mode: Some(Mode::JSON) };
-
-    let req = CreateChatCompletionRequestArgs::default()
-    .model(GPT4_TURBO_PREVIEW.to_string())
-    .messages(vec![
-        ChatCompletionRequestMessage::User(
-            ChatCompletionRequestUserMessage{
-                role: Role::User,
-                content:    ChatCompletionRequestUserMessageContent::Text(String::from("
-                return true if all movies are soft and or romantic, false otherwise in the specified json format
-                ")),
-                name: None,
-            }
-        )],
-    ).build().unwrap();
-  
-    let result = patched_client.chat_completion(
-        IterableOrSingle::Single(IsSoft::default()),
-        (), //no validation context needed
-        2,
-        false, //consider removing this from the api, it appears streaming is not supported
-        req,
-    ).await;
+    tokio::runtime::Builder::new_multi_thread()
+    .enable_all()
+    .build()
+    .unwrap()
+    .block_on(async {
+        let req = CreateChatCompletionRequestArgs::default()
+        .model(GPT4_TURBO_PREVIEW.to_string())
+        .messages(vec![
+            ChatCompletionRequestMessage::User(
+                ChatCompletionRequestUserMessage{
+                    role: Role::User,
+                    content:    ChatCompletionRequestUserMessageContent::Text(String::from("
+                    return true if all movies are soft and or romantic, false otherwise in the specified json format
+                    ")),
+                    name: None,
+                }
+            )],
+        ).build().unwrap();
+      
+        let future = patched_client.chat_completion(
+            IterableOrSingle::Single(IsSoft::default()),
+            (), //no validation context needed
+            2,
+            req,
+        );
     
-    match result {
-        Ok(res) => {
-            match res.get_single().content {
-                true => return Ok(()),
-                false => return Err(ValidationError::new("movies are not soft and or romantic")),
+    
+        let result =to_sync(future);
+        
+        match result {
+            Ok(res) => {
+                match res.unwrap().unwrap().content {
+                    true => return Ok(()),
+                    false => return Err(ValidationError::new("movies are not soft and or romantic")),
+                }
+            }
+            Err(e) => {
+                ///if the llm fails, the movies are undecisive and we reject them
+                return Err(ValidationError::new("movies are undecisive"))
             }
         }
-        Err(e) => {
-            ///if the llm fails, the movies are undecisive and we reject them
-            return Err(ValidationError::new("movies are undecisive"))
-        }
-    }
+    })
 }
 
 
@@ -113,14 +116,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         IterableOrSingle::Single(Movies::default()),
         (), //no validation context needed
         2,
-        false, //consider removing this from the api, it appears streaming is not supported
         req,
     );
     println!("{:?}", result.await);
     Ok(())
 }
 
-*/
 
 
-fn main(){}
+
+//fn main(){}

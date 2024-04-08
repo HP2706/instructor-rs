@@ -1,5 +1,5 @@
 use schemars::JsonSchema;
-use std::{env, vec};
+use std::vec;
 use instructor_rs::mode::Mode;  
 use instructor_rs::patch::Patch;
 use instructor_rs::enums::IterableOrSingle;
@@ -8,16 +8,14 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 use instructor_rs::common::GPT4_TURBO_PREVIEW;
 use async_openai::types::{
-    CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
+    CreateChatCompletionRequestArgs,
     ChatCompletionRequestUserMessage, ChatCompletionRequestMessage, Role,
     ChatCompletionRequestUserMessageContent
 };
 use async_openai::Client;
-use validator::ValidationError;
-use async_stream::stream;
 use instructor_rs::enums::InstructorResponse;
-use futures::stream::{Stream, StreamExt, iter};
-
+use futures::stream::StreamExt;
+use instructor_rs::utils::to_sync;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new();
@@ -29,15 +27,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ///  JsonSchema, Serialize, Debug, Default, 
     ///  Validate, Deserialize, Clone 
     ///)]
-    #[schemars(description = "this is a description of the weather api")]
-    #[derive(
-        JsonSchema, Serialize, Debug, Default, 
-        Validate, Deserialize, Clone
-    )]
-        
+    #[derive_all]    
     struct Number {
-        //#[schemars(description = "am or pm")]
-        //time_of_day: TestEnum,
         #[schemars(description = "the value")]
         value: i64,
     }
@@ -49,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ChatCompletionRequestUserMessage{
                 role: Role::User,
                 content:    ChatCompletionRequestUserMessageContent::Text(String::from("
-                write 2 numbers, IT MUST BE 2 JSON OBJECTS
+                write 2 numbers in the specified json format
                 ")),
                 name: None,
             }
@@ -71,23 +62,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     use std::time::Instant;
 
-
-    let model = result.await;
+    let model = result.await.unwrap(); // we accept panic when using unwrap()
     match model {
-        Ok(x) => {
-            match x {
-                InstructorResponse::Many(x) => println!("result: {:?}", x),
-                InstructorResponse::One(x) => println!("result: {:?}", x),
-                InstructorResponse::Stream(mut x) => {
-                    let t0 = Instant::now();
-                    while let Some(x) = x.next().await {
-                        println!("main!! result: {:?} at time {:?}", x, t0.elapsed());
-                    }
-                },
+        InstructorResponse::Many(x) => println!("result: {:?}", x),
+        InstructorResponse::One(x) => println!("result: {:?}", x),
+        InstructorResponse::Stream(mut x) => {
+            let t0 = Instant::now();
+            while let Some(x) = x.next().await {
+                println!("model: {:?} at time {:?}", x, t0.elapsed());
             }
-        }
-        Err(e) => println!("error: {:?}", e),
+        },
     }
+    /// model: Number { value: 1 } at time 1.1
+    /// model: Number { value: 2 } at time 1,8
     Ok(())
 }
 

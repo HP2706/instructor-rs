@@ -1,5 +1,5 @@
 use schemars::JsonSchema;
-use std::{env, vec};
+use std::vec;
 use instructor_rs::mode::Mode;  
 use instructor_rs::patch::Patch;
 use instructor_rs::enums::IterableOrSingle;
@@ -8,12 +8,11 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 use instructor_rs::common::GPT4_TURBO_PREVIEW;
 use async_openai::types::{
-    CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
+    CreateChatCompletionRequestArgs,
     ChatCompletionRequestUserMessage, ChatCompletionRequestMessage, Role,
     ChatCompletionRequestUserMessageContent
 };
 use async_openai::Client;
-use validator::ValidationError;
 
 
 #[tokio::main]
@@ -54,7 +53,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 content:    ChatCompletionRequestUserMessageContent::Text(String::from("
                 what is the weather at 10 in the evening in new york? 
                 and what is the whether in the biggest city in Denmark in the evening?
-                return in specified json format
                 ")),
                 name: None,
             }
@@ -72,7 +70,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("result: {:?}", result.await);
     ///Ok(Many([Weather { time: 10, city: "New York" }, Weather { time: 10, city: "Copenhagen" }]))
-    
     Ok(())
 }
 

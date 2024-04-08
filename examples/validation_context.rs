@@ -39,7 +39,8 @@ fn check_is_multiple(age: i64, arg : i64) -> Result<(), ValidationError> {
     if age % 3 == 0 {
         Ok(())
     } else {
-        Err(ValidationError::new("The age {} is not a multiple of 3"))
+        let err_msg = format!("The age {} is not a multiple of 3", age);
+        Err(ValidationError::new(&*Box::leak(err_msg.into_boxed_str())))
     }
 }
 

@@ -6,7 +6,7 @@ use instructor_rs::patch::{Patch};
 use instructor_rs::enums::IterableOrSingle;
 use model_traits_macro::derive_all;
 use serde::{Deserialize, Serialize};
-use validator::Validate;
+use validator::{Validate, ValidationError};
 use instructor_rs::common::{GPT3_5_TURBO, GPT4_TURBO_PREVIEW};
 use async_openai::types::{
     CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
@@ -133,6 +133,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             },
         }
     }
+
+
+    #[derive(JsonSchema, Serialize, Debug, Default, validator::Validate, Deserialize, Clone)]
+    #[schemars(description="add the two numbers a and b must each be positive and larger than a number c")]
+    struct Add {
+        #[schemars(description="a must be positive")]
+        #[validate(range(min = 0))] // these are built in validators
+        #[validate(custom(function = "a_geq_c", arg = "&'v_a i64"))]
+        a : i64,
+        #[schemars(description="a must be positive")]
+        #[validate(range(min = 0))] // these are built in validators
+        #[validate(custom(function = "a_geq_c", arg = "&'v_a i64"))]
+        b : i64,
+    }
+
+    fn a_geq_c(a: i64, c: &i64) -> Result<(), validator::ValidationError> {
+        if a < *c {
+            let err_msg = format!("a must be greater than or equal to {}", c);
+            return Err(ValidationError::new(&*Box::leak(err_msg.into_boxed_str())));
+        }
+        Ok(())
+    }
+
     Ok(())
 }
 
