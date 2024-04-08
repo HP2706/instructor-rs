@@ -52,10 +52,12 @@ where
 
             let message = format!(
                 "As a genius expert, your task is to understand the content and provide
-                the parsed objects in json that match the following json_schema:\n{}\n
-                Make sure to return an instance of the JSON, not the schema itself",
+                the parsed objects in JSON that match the following json_schema:\n{}\n
+                Make sure to return instances of the JSON, not the schema itself",
                 schema
             );
+
+
             match mode {
                 Mode::JSON => {
                     kwargs.response_format = Some(
@@ -70,7 +72,6 @@ where
                             r#type: ChatCompletionResponseFormatType::JsonObject,
                         }
                     );
-                    //no schema specified....  ("schema".to_string(), schema.to_string())
                 },
                 Mode::MD_JSON => {
                     let user_message = ChatCompletionRequestMessage::User(
@@ -87,9 +88,9 @@ where
                 _ => {}
             }
             
-            match &kwargs.messages[0] {
-                ChatCompletionRequestMessage::System(_) => {
-                    //TODO
+            match &mut kwargs.messages[0] {
+                ChatCompletionRequestMessage::System(kwargs_message) => {
+                    kwargs_message.content += &message;
                 }
                 _=> {
                     kwargs.messages.insert(0, 
@@ -140,6 +141,7 @@ where
     */
     match response {
         ChatCompletionResponseWrapper::Stream(res) => {
+            println!("streaming response");
             let res = T::from_streaming_response_async(response_model, res, validation_context, mode).await;
             Ok(res)
         }
