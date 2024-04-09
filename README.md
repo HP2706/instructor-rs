@@ -19,22 +19,30 @@ by using block_on, we can call async function in synchronous functions.
   - [x] async non-streaming
   - [x] automatic retry logic
   - [x] custom struct validation
+  - [x] support for Together api
+  - [x] support for ollama
 
 ##Lacking
 - missing features:
   - [ ] anthropic support
-  - [ ] synchronous support
-  - [ ] advanced validation( validation conditioned on multiple fields)
+  - [ ] synchronous support(you can try to use tokio::block_on to make it work crudely)
+  - [ ] advanced validation( validation conditioned on multiple fields at once)
+  - [ ] support for things like Union[datamodel1, datamodel2] 
 
 ##Installation guide
 To get started, make sure you have [Rust](https://www.rust-lang.org/tools/install) installed.
-or just use
 
+copy the following to your Cargo.toml
 
-use cargo add instructor_rs
-or write the following in your Cargo.toml
+instructor-rs = { git = "https://github.com/HP2706/instructor-rs"}
 
-instructor-rs = { git = "}
+use in rust with 
+```rust
+use instructor_rs::patch::Patch;
+use instructor_rs::mode::Mode;
+use async_openai::Client;
+```
+
 ##Concepts
 
 The concepts are very similar to that of instructor. The biggest difference being how class/struct validation works.
@@ -71,29 +79,70 @@ use schemars::JsonSchema;
 use validator::{Validate, ValidationError};
 
 #[derive(JsonSchema, Serialize, Debug, Default, Validate, Deserialize, Clone)]
-    #[schemars(description="add the two numbers a and b must each be positive and larger than a number c")]
-    struct Add {
-        #[schemars(description="a must be positive")]
-        #[validate(range(min = 0))] // these are built in validators
-        #[validate(custom(function = "a_geq_c", arg = "&'v_a i64"))]
-        a : i64,
-        #[schemars(description="a must be positive")]
-        #[validate(range(min = 0))] // these are built in validators
-        #[validate(custom(function = "a_geq_c", arg = "&'v_a i64"))]
-        b : i64,
-    }
+#[schemars(description="add the two numbers a and b must each be positive and larger than a number c=10")]
+struct Add {
+    #[schemars(description="a must be positive")]
+    #[validate(range(min = 0))] // these are built in validators
+    #[validate(custom(function = "a_geq_c", arg = "&'v_a i64"))]
+    a : i64,
+    #[schemars(description="a must be positive")]
+    #[validate(range(min = 0))] // these are built in validators
+    #[validate(custom(function = "a_geq_c", arg = "&'v_a i64"))]
+    b : i64,
+}
 
-    fn a_geq_c(a: i64, c: &i64) -> Result<(), validator::ValidationError> {
-        if a < *c {
-            let err_msg = format!("a must be greater than or equal to {}", c);
-            return Err(ValidationError::new(&*Box::leak(err_msg.into_boxed_str())));
-        }
-        Ok(())
+fn a_geq_c(a: i64, c: &i64) -> Result<(), validator::ValidationError> {
+    if a < *c {
+        let err_msg = format!("a must be greater than or equal to {}", c);
+        return Err(ValidationError::new(&*Box::leak(err_msg.into_boxed_str())));
     }
+    Ok(())
+}
 ```
-
 pydantic offer a lot more flexibility in how validation should work, for instance doing validation you can condition your validation in multiple fields and determine ordering of validation. these things are not implemented in this library. 
 
+it is also important to note that nested custom validation does not work with the validators crate. Thus if you have fields that themselves implement the Validate trait the behaviourt might be [unanticipated](https://github.com/Keats/validator?tab=readme-ov-file).
+
+##providers
+
+the async_openai allows some customizability in the client, which means that you can use openai-api compatible endpoints.
+
+for instance you can use the Together_ai endpoint chat completions endpoint like this:
+
+```rust
+use async_openai::config::OpenAIConfig;
+use std::env;
+let api_key = env::var("TOGETHER_API_KEY").unwrap();
+let endpoint = "https://api.together.xyz/v1";
+
+    // Create an OpenAIConfig with the specified API key and endpoint
+    let config = OpenAIConfig::default()
+    .with_api_key(api_key)
+    .with_api_base(endpoint.to_string());
+
+// Create a Client with the specified configuration
+let client = Client::with_config(config);
+let patched_client = Patch { client: client, mode: Some(Mode::TOOLS) };
+```
+
+you can use local models via ollama
+
+```rust
+//GROQ_API_KEY
+let api_key = "ollama"; //this api key will not get used;
+let endpoint ="http://localhost:11434/v1";
+
+// Create an OpenAIConfig with the specified API key and endpoint
+let config = OpenAIConfig::default()
+.with_api_key(api_key)
+.with_api_base(endpoint.to_string());
+
+// Create a Client with the specified configuration
+let client = Client::with_config(config);
+let mode = Mode::TOOLS;
+let patched_client = Patch { client: client.clone(), mode: Some(mode) };
+let model = "mistral:latest";
+```
 
 
 ##examples 
