@@ -25,18 +25,24 @@ by using block_on, we can call async function in synchronous functions.
 ##Lacking
 - missing features:
   - [ ] anthropic support
-  - [ ] synchronous support
-  - [ ] advanced validation( validation conditioned on multiple fields)
+  - [ ] synchronous support(you can try to use tokio::block_on to make it work crudely)
+  - [ ] advanced validation( validation conditioned on multiple fields at once)
+  - [ ] support for things like Union[datamodel1, datamodel2] 
 
 ##Installation guide
 To get started, make sure you have [Rust](https://www.rust-lang.org/tools/install) installed.
-or just use
 
+copy the following to your Cargo.toml
 
-use cargo add instructor_rs
-or write the following in your Cargo.toml
+instructor-rs = { git = "https://github.com/HP2706/instructor-rs"}
 
-instructor-rs = { git = "}
+use in rust with 
+```rust
+use instructor_rs::patch::Patch;
+use instructor_rs::mode::Mode;
+use async_openai::Client;
+```
+
 ##Concepts
 
 The concepts are very similar to that of instructor. The biggest difference being how class/struct validation works.
