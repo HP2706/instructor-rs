@@ -1,12 +1,17 @@
 This is a rust port of the [Instructor](https://github.com/jxnl/instructor/tree/ba93407b050bcbfbf5716cc67856f8491a00b98a) library
 
 the library is built on top of the most popular openai rust client: [async_openai](https://github.com/64bit/async-openai)
-this library is inherently async in nature, however it is possible to make this run in non-async function by using the tokio runtime.
+this library is inherently async in nature, however it is possible to make this run in non-async function by using the [tokio runtime](https://tokio.rs/tokio/topics/bridging).
 
 ```rust
-use tokio::runtime::Runtime;
-pub fn to_sync<T>(future: impl std::future::Future<Output = T>) -> T {
-    Runtime::new().unwrap().block_on(future)
+fn main(){
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            //your async code
+        })
 }
 ```
 
