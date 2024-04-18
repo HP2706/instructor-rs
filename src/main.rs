@@ -1,4 +1,5 @@
 use instructor_rs::dsl::iterable::IterableBase;
+use instructor_rs::openai_schema::OpenAISchema;
 use schemars::JsonSchema;
 use std::{env, vec};
 use instructor_rs::mode::Mode;  
@@ -80,14 +81,12 @@ async fn test(){
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new();
     let mode = Mode::TOOLS;
     let patched_client = Patch { client: client.clone(), mode: Some(mode) };
     
-    
-
     let test = true;
     if test {
         let mut req = CreateChatCompletionRequestArgs::default()
@@ -112,27 +111,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .unwrap();
             
-        let t0 = Instant::now();
-        let result = patched_client.chat_completion(
-            IterableOrSingle::Iterable(Number::default()),
-            (),
-            1,
-            req
-        );
+        tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            let t0 = Instant::now();
+            let result = patched_client.chat_completion(
+                IterableOrSingle::Iterable(Number::default()),
+                (),
+                1,
+                req
+            );
 
-        let x = result.await.unwrap();
+            let x = result.await.unwrap();
+
+            match x {
+                InstructorResponse::Many(x) => println!("result: {:?}", x),
+                InstructorResponse::One(x) => println!("result: {:?}", x),
+                InstructorResponse::Stream(x) => {
+                    pin_mut!(x);
+                    while let Some(x) = x.next().await {
+                        println!("main!! result: {:?} at time {:?}", x, t0.elapsed());
+                    }
+                },
+            }
         
-        match x {
-            InstructorResponse::Many(x) => println!("result: {:?}", x),
-            InstructorResponse::One(x) => println!("result: {:?}", x),
-            InstructorResponse::Stream(x) => {
-                pin_mut!(x);
-                while let Some(x) = x.next().await {
-                    println!("main!! result: {:?} at time {:?}", x, t0.elapsed());
-                }
-            },
-        }
+        });
+        
     }
+
+
+
 
 
     #[derive(JsonSchema, Serialize, Debug, Default, validator::Validate, Deserialize, Clone)]

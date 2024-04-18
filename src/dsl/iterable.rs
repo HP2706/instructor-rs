@@ -140,7 +140,6 @@ where
                                         .and_then(|tc| tc.get(0))
                                         .and_then(|call| call.function.as_ref())
                                         .and_then(|f| f.arguments.clone()) {
-                                        println!("tools: chunk: {:?} at time: {:?}", arguments, t0.elapsed());
                                         return Some(Ok(Ok(arguments)));
                                     }
                                 }
